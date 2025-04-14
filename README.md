@@ -110,9 +110,3 @@ ARC is in early development and we're actively looking for:
 - Foundational users
 - Pilot partners (devtools, infra, eng teams)
 - Open-source collaborators
-
----
-
-## License
-
-MIT
