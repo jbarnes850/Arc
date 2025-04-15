@@ -24,6 +24,18 @@
       {
         "command": "arc.linkDecisionToCode",
         "title": "ARC: Link Decision to Current Code"
+      },
+      {
+        "command": "arc.showWelcome",
+        "title": "ARC: Show Welcome"
+      },
+      {
+        "command": "arc.showArchitecturePanel",
+        "title": "ARC: Show Architecture Panel"
+      },
+      {
+        "command": "arc.showContextPanel",
+        "title": "ARC: Show Context Panel"
       }
     ],
     "viewsContainers": {
@@ -46,7 +58,56 @@
           "name": "Architecture"
         }
       ]
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "arcWelcome",
+        "title": "Get Started with ARC",
+        "description": "Learn how ARC captures and surfaces architectural knowledge",
+        "steps": [
+          {
+            "id": "welcome",
+            "title": "Welcome to ARC",
+            "description": "ARC is the memory layer for engineering teams — capturing, preserving, and surfacing architectural decisions and code evolution directly in your IDE.",
+            "media": {
+              "image": "resources/arc_diagram.png",
+              "altText": "ARC Welcome"
+            },
+            "completionEvents": ["onCommand:arc.showWelcome"]
+          },
+          {
+            "id": "indexRepo",
+            "title": "Index Your Repository",
+            "description": "ARC needs to analyze your codebase and Git history to build a temporal knowledge graph. This is a one-time process that enables all ARC features.",
+            "media": {
+              "image": "resources/arc_diagram.png",
+              "altText": "Repository Indexing"
+            },
+            "completionEvents": ["onCommand:arc.indexRepository"]
+          },
+          {
+            "id": "viewArchitecture",
+            "title": "Explore Your Architecture",
+            "description": "After indexing, ARC automatically generates a system architecture diagram based on your codebase structure.",
+            "media": {
+              "image": "resources/arc_diagram.png",
+              "altText": "Architecture Diagram"
+            },
+            "completionEvents": ["onCommand:arc.showArchitecturePanel"]
+          },
+          {
+            "id": "captureDecisions",
+            "title": "Capture Architectural Decisions",
+            "description": "Document and link important decisions to specific parts of your codebase, creating a living architectural memory.",
+            "media": {
+              "image": "resources/arc_diagram.png",
+              "altText": "Decision Records"
+            },
+            "completionEvents": ["onCommand:arc.createDecisionRecord"]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",
@@ -63,9 +124,8 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/node": "^20.x",
     "@types/vscode": "^1.99.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
     "@typescript-eslint/parser": "^8.28.0",
     "eslint": "^9.23.0",
@@ -74,7 +134,7 @@
     "typescript": "^5.8.2",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@types/sqlite3": "^3.1.11"
+    "@types/sqlite3": "^3.1.8"
   },
   "dependencies": {
     "sqlite3": "^5.1.7",

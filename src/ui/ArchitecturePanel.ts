@@ -39,6 +39,30 @@ export class ArchitecturePanel extends BaseWebviewPanel {
       'ARC: Architecture',
       vscode.ViewColumn.Beside
     );
+    
+    // Set up message handling
+    if (this.panel) {
+      this.panel.webview.onDidReceiveMessage(
+        message => this.handleMessage(message),
+        undefined,
+        this.context.subscriptions
+      );
+    }
+  }
+
+  /**
+   * Handle messages from the webview
+   * @param message Message from the webview
+   */
+  private handleMessage(message: any): void {
+    switch (message.command) {
+      case 'createDecision':
+        vscode.commands.executeCommand('arc.createDecisionRecord');
+        break;
+      case 'viewContext':
+        vscode.commands.executeCommand('arc.showContextPanel');
+        break;
+    }
   }
 
   /**
@@ -96,54 +120,62 @@ export class ArchitecturePanel extends BaseWebviewPanel {
   }
 
   /**
-   * Get HTML content for displaying the architecture diagram
+   * Get the HTML for the architecture diagram
    * @param repoName Repository name
    * @param diagramHtml HTML for the diagram
    */
-  private getHtmlForDiagram(repoName: string, diagramHtml: string): string {
+  protected getHtmlForDiagram(repoName: string, diagramHtml: string): string {
     if (!this.panel) {
       return '';
     }
-
-    // Load Mermaid.js from a CDN
-    // In a real implementation, we would bundle Mermaid.js with the extension
-    const mermaidScript = `<script src="https://cdn.jsdelivr.net/npm/mermaid@9/dist/mermaid.min.js"></script>`;
 
     return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         ${this.getCommonHeadHtml(this.panel.webview)}
-        ${mermaidScript}
         <title>ARC Architecture</title>
-        <style>
-          .diagram-container {
-            background-color: #f5f5f5;
-            padding: 20px;
-            border-radius: 5px;
-            margin-top: 20px;
-          }
-        </style>
       </head>
       <body>
         <div class="container">
-          <h1>Architecture Diagram: ${repoName}</h1>
-          <p>This diagram shows the high-level structure of the codebase.</p>
+          <div class="header">
+            <h1>System Architecture: ${repoName}</h1>
+            <p class="subtitle">This diagram is automatically generated from your codebase structure and relationships.</p>
+          </div>
           
           <div class="diagram-container">
             ${diagramHtml}
           </div>
           
-          <div class="legend">
-            <h3>Legend</h3>
-            <ul>
-              <li><span class="file-node">[[File]]</span> - Source file</li>
-              <li><span class="class-node">{{Class}}</span> - Class definition</li>
-              <li><span class="solid-edge">→</span> - Contains relationship</li>
-              <li><span class="dashed-edge">⇢</span> - Other relationship</li>
-            </ul>
+          <div class="next-steps">
+            <h2>What's Next?</h2>
+            <div class="card-container">
+              <div class="card" onclick="vscode.postMessage({command: 'createDecision'})">
+                <h3>📝 Document a Decision</h3>
+                <p>Capture architectural decisions and link them to specific code elements.</p>
+                <button>Create Decision Record</button>
+              </div>
+              <div class="card" onclick="vscode.postMessage({command: 'viewContext'})">
+                <h3>🔍 View Code Context</h3>
+                <p>Open a file to see its commit history and linked decisions.</p>
+                <button>Open Context Panel</button>
+              </div>
+            </div>
           </div>
         </div>
+        
+        <script>
+          // Handle button clicks
+          document.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+              const card = e.target.closest('.card');
+              if (card) {
+                const command = card.getAttribute('onclick').match(/command: '(.+?)'/)[1];
+                vscode.postMessage({command});
+              }
+            }
+          });
+        </script>
       </body>
       </html>
     `;

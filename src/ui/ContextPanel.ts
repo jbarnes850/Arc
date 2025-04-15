@@ -44,7 +44,7 @@ export class ContextPanel extends BaseWebviewPanel {
     // Set up message handling
     if (this.panel) {
       this.panel.webview.onDidReceiveMessage(
-        message => this.handleMessage(message),
+        (message: { command: string; decisionId?: string }) => this.handleMessage(message),
         undefined,
         this.context.subscriptions
       );
@@ -82,7 +82,7 @@ export class ContextPanel extends BaseWebviewPanel {
    * Handle messages from the webview
    * @param message Message from the webview
    */
-  private handleMessage(message: any): void {
+  private handleMessage(message: { command: string; decisionId?: string }): void {
     switch (message.command) {
       case 'openDecision':
         // Open the decision record in a new editor
@@ -95,7 +95,6 @@ export class ContextPanel extends BaseWebviewPanel {
         }
         break;
       case 'createDecision':
-        // Create a new decision record
         vscode.commands.executeCommand('arc.createDecisionRecord');
         break;
     }
@@ -153,20 +152,40 @@ export class ContextPanel extends BaseWebviewPanel {
       </head>
       <body>
         <div class="container">
-          <h1>Context for ${this.formatStableIdentifier(element.stableIdentifier)}</h1>
-          
-          <div class="section">
-            <h2>Commit History</h2>
-            ${commitsHtml}
+          <div class="header">
+            <h1>Code Context</h1>
+            <p class="element-path">${this.formatStableIdentifier(element.stableIdentifier)}</p>
           </div>
           
-          <div class="section">
-            <h2>Linked Decisions</h2>
-            ${decisionsHtml}
-            <div class="actions">
-              <button class="action-button" onclick="createDecision()">Create Decision</button>
-              ${this.currentVersion ? '<button class="action-button" onclick="linkDecision()">Link Existing Decision</button>' : ''}
+          <div class="context-sections">
+            <div class="section">
+              <h2>Commit History</h2>
+              ${commits.length > 0 ? commitsHtml : '<p class="empty-state">No commit history found for this element.</p>'}
             </div>
+            
+            <div class="section">
+              <h2>Linked Decisions</h2>
+              ${decisions.length > 0 ? 
+                decisionsHtml : 
+                `<p class="empty-state">No decisions linked to this element yet.</p>
+                 <button class="primary-button" onclick="createDecision()">
+                   Document a Decision for This Code
+                 </button>`
+              }
+              ${decisions.length > 0 ? 
+                `<div class="actions">
+                  <button class="action-button" onclick="createDecision()">Create New Decision</button>
+                  ${this.currentVersion ? '<button class="action-button" onclick="linkDecision()">Link Existing Decision</button>' : ''}
+                </div>` : ''
+              }
+            </div>
+          </div>
+          
+          <div class="info-panel">
+            <h3>About ARC Context</h3>
+            <p>ARC captures the evolution of your codebase and preserves architectural decisions. 
+               This panel shows you the history and decisions related to the code you're viewing.</p>
+            <p><strong>Tip:</strong> Create decision records to document important architectural choices and link them to specific code elements.</p>
           </div>
         </div>
         

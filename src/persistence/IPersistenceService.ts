@@ -45,4 +45,9 @@ export interface IPersistenceService {
   
   // Database initialization
   initializeDatabase(): Promise<void>;
+  
+  // Count operations
+  getCodeElementCount(repoId: string): Promise<number>;
+  getCommitCount(repoId: string): Promise<number>;
+  getDecisionCount(repoId: string): Promise<number>;
 }

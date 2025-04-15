@@ -29,7 +29,11 @@ suite('GitHubIntegrationService Test Suite', () => {
       findDecisionRecordsLinkedToVersion: async () => [],
       linkDecisionToCodeVersion: async () => {},
       linkVersionToPreviousVersion: async () => {},
-      initializeDatabase: async () => {}
+      initializeDatabase: async () => {},
+      // Add count methods
+      getCodeElementCount: async () => 0,
+      getCommitCount: async () => 0,
+      getDecisionCount: async () => 0
     };
     
     // Initialize the integration service with our minimal mock

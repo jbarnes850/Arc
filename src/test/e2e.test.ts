@@ -137,6 +137,36 @@ class MockPersistenceService implements IPersistenceService {
     });
     return Promise.resolve();
   }
+
+  async getCodeElementCount(repoId: string): Promise<number> {
+    let count = 0;
+    this.codeElements.forEach(element => {
+      if (element.repoId === repoId) {
+        count++;
+      }
+    });
+    return count;
+  }
+
+  async getCommitCount(repoId: string): Promise<number> {
+    let count = 0;
+    this.commits.forEach(commit => {
+      if (commit.repoId === repoId) {
+        count++;
+      }
+    });
+    return count;
+  }
+
+  async getDecisionCount(repoId: string): Promise<number> {
+    let count = 0;
+    this.decisionRecords.forEach(decision => {
+      if (decision.repoId === repoId) {
+        count++;
+      }
+    });
+    return count;
+  }
 }
 
 /**

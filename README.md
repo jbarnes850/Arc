@@ -1,10 +1,13 @@
-# ARC-1: The Memory Layer for Engineering Teams
+# ARC: The Memory Layer for Engineering Teams
 
 > A local-first, ambient memory system that captures the *why* behind your code — and surfaces it directly inside your IDE.
 
 ---
 
 ## What is ARC?
+
+### System Architecture
+![System Architecture](/resources/arc_diagram.png)
 
 **ARC (Architectural Reasoning Context)** is a developer tool that builds a persistent, versioned memory graph from your codebase. It captures structural code changes, Git history, and engineering decisions — and makes that history ambiently accessible as you work.
 

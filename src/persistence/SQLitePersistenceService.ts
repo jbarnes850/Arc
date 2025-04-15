@@ -14,6 +14,12 @@ import {
   DecisionRecord 
 } from '../models/types';
 
+// Define SQLite error type to avoid 'any' type errors
+type SQLiteError = {
+  message: string;
+  code?: string;
+};
+
 /**
  * SQLite implementation of the IPersistenceService
  */
@@ -42,14 +48,14 @@ export class SQLitePersistenceService implements IPersistenceService {
         sqlite3.verbose();
         
         // Create or open the database
-        this.db = new sqlite3.Database(this.dbPath, (err) => {
+        this.db = new sqlite3.Database(this.dbPath, (err: SQLiteError) => {
           if (err) {
             reject(new Error(`Failed to open database: ${err.message}`));
             return;
           }
           
           // Enable foreign keys
-          this.db!.run('PRAGMA foreign_keys = ON', (err) => {
+          this.db!.run('PRAGMA foreign_keys = ON', (err: SQLiteError) => {
             if (err) {
               reject(new Error(`Failed to enable foreign keys: ${err.message}`));
               return;
@@ -134,7 +140,7 @@ export class SQLitePersistenceService implements IPersistenceService {
               CREATE INDEX IF NOT EXISTS idx_decision_records_repo_id ON decision_records (repo_id);
             `;
             
-            this.db!.exec(schema, (err) => {
+            this.db!.exec(schema, (err: SQLiteError) => {
               if (err) {
                 reject(new Error(`Failed to create schema: ${err.message}`));
                 return;
@@ -165,7 +171,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         VALUES (?, ?, ?)
       `;
 
-      this.db.run(sql, [repository.repoId, repository.path, repository.name], (err) => {
+      this.db.run(sql, [repository.repoId, repository.path, repository.name], (err: SQLiteError) => {
         if (err) {
           reject(err);
           return;
@@ -186,7 +192,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT * FROM repositories WHERE repo_id = ?
       `;
 
-      this.db.get(sql, [repoId], (err, row: any) => {
+      this.db.get(sql, [repoId], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -219,7 +225,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         VALUES (?, ?, ?)
       `;
 
-      this.db.run(sql, [developer.devId, developer.name, developer.email], (err) => {
+      this.db.run(sql, [developer.devId, developer.name, developer.email], (err: SQLiteError) => {
         if (err) {
           reject(err);
           return;
@@ -240,7 +246,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT * FROM developers WHERE email = ?
       `;
 
-      this.db.get(sql, [email], (err, row: any) => {
+      this.db.get(sql, [email], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -282,7 +288,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           commit.authorDevId,
           commit.committerDevId
         ],
-        (err) => {
+        (err: SQLiteError) => {
           if (err) {
             reject(err);
             return;
@@ -304,7 +310,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT * FROM commits WHERE commit_hash = ?
       `;
 
-      this.db.get(sql, [commitHash], (err, row: any) => {
+      this.db.get(sql, [commitHash], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -347,7 +353,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           codeElement.type,
           codeElement.stableIdentifier
         ],
-        (err) => {
+        (err: SQLiteError) => {
           if (err) {
             reject(err);
             return;
@@ -369,7 +375,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT * FROM code_elements WHERE element_id = ?
       `;
 
-      this.db.get(sql, [elementId], (err, row: any) => {
+      this.db.get(sql, [elementId], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -402,7 +408,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         WHERE repo_id = ? AND stable_identifier = ?
       `;
 
-      this.db.get(sql, [repoId, stableIdentifier], (err, row: any) => {
+      this.db.get(sql, [repoId, stableIdentifier], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -448,7 +454,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           version.endLine,
           version.previousVersionId
         ],
-        (err) => {
+        (err: SQLiteError) => {
           if (err) {
             reject(err);
             return;
@@ -470,7 +476,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT * FROM code_element_versions WHERE version_id = ?
       `;
 
-      this.db.get(sql, [versionId], (err, row: any) => {
+      this.db.get(sql, [versionId], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -509,7 +515,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         LIMIT 1
       `;
 
-      this.db.get(sql, [elementId], (err, row: any) => {
+      this.db.get(sql, [elementId], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -550,7 +556,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         ${limitClause}
       `;
 
-      this.db.all(sql, [elementId], (err, rows: any[]) => {
+      this.db.all(sql, [elementId], (err: SQLiteError, rows: any[]) => {
         if (err) {
           reject(err);
           return;
@@ -593,7 +599,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           decision.createdAt,
           decision.authorDevId
         ],
-        (err) => {
+        (err: SQLiteError) => {
           if (err) {
             reject(err);
             return;
@@ -615,7 +621,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT * FROM decision_records WHERE decision_id = ?
       `;
 
-      this.db.get(sql, [decisionId], (err, row: any) => {
+      this.db.get(sql, [decisionId], (err: SQLiteError, row: any) => {
         if (err) {
           reject(err);
           return;
@@ -651,7 +657,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         WHERE r.version_id = ?
       `;
 
-      this.db.all(sql, [versionId], (err, rows: any[]) => {
+      this.db.all(sql, [versionId], (err: SQLiteError, rows: any[]) => {
         if (err) {
           reject(err);
           return;
@@ -684,7 +690,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         VALUES (?, ?)
       `;
 
-      this.db.run(sql, [decisionId, versionId], (err) => {
+      this.db.run(sql, [decisionId, versionId], (err: SQLiteError) => {
         if (err) {
           reject(err);
           return;
@@ -707,13 +713,77 @@ export class SQLitePersistenceService implements IPersistenceService {
         WHERE version_id = ?
       `;
 
-      this.db.run(sql, [previousVersionId, versionId], (err) => {
+      this.db.run(sql, [previousVersionId, versionId], (err: SQLiteError) => {
         if (err) {
           reject(err);
           return;
         }
         resolve();
       });
+    });
+  }
+
+  // Count operations
+  async getCodeElementCount(repoId: string): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.get(
+        'SELECT COUNT(*) as count FROM code_elements WHERE repo_id = ?',
+        [repoId],
+        (err: SQLiteError, row: { count: number }) => {
+          if (err) {
+            reject(new Error(`Failed to get code element count: ${err.message}`));
+            return;
+          }
+          resolve(row ? row.count : 0);
+        }
+      );
+    });
+  }
+
+  async getCommitCount(repoId: string): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.get(
+        'SELECT COUNT(*) as count FROM commits WHERE repo_id = ?',
+        [repoId],
+        (err: SQLiteError, row: { count: number }) => {
+          if (err) {
+            reject(new Error(`Failed to get commit count: ${err.message}`));
+            return;
+          }
+          resolve(row ? row.count : 0);
+        }
+      );
+    });
+  }
+
+  async getDecisionCount(repoId: string): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.get(
+        'SELECT COUNT(*) as count FROM decision_records WHERE repo_id = ?',
+        [repoId],
+        (err: SQLiteError, row: { count: number }) => {
+          if (err) {
+            reject(new Error(`Failed to get decision count: ${err.message}`));
+            return;
+          }
+          resolve(row ? row.count : 0);
+        }
+      );
     });
   }
 }

@@ -1,6 +1,8 @@
+// Import type declarations for VS Code API
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as crypto from 'crypto';
+
 import { SQLitePersistenceService } from './persistence/SQLitePersistenceService';
 import { IPersistenceService } from './persistence/IPersistenceService';
 import { GitHubIntegrationService } from './integration/GitHubIntegrationService';
@@ -20,6 +22,20 @@ import { Repository } from './models/types';
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
   console.log('ARC extension is now active');
+
+  // Check if this is the first run
+  const isFirstRun = context.globalState.get('arc.firstRun', true);
+  
+  if (isFirstRun) {
+    // Mark as no longer first run
+    context.globalState.update('arc.firstRun', false);
+    
+    // Show the welcome walkthrough
+    // Use a simple Promise to delay execution without relying on Node.js-specific functions
+    Promise.resolve().then(() => {
+      vscode.commands.executeCommand('workbench.action.openWalkthrough', 'arc.arcWelcome', false);
+    });
+  }
 
   // Initialize services
   const persistenceService: IPersistenceService = new SQLitePersistenceService(context);
@@ -65,6 +81,23 @@ export function activate(context: vscode.ExtensionContext) {
       const repoPath = workspaceFolder.uri.fsPath;
       const repoName = workspaceFolder.name;
       
+      // Request explicit authorization with clear information
+      const authorization = await vscode.window.showInformationMessage(
+        `ARC needs to index your repository "${repoName}" to build a temporal knowledge graph. This will:
+
+• Parse your code structure using tree-sitter
+• Process your Git commit history
+• Store data locally in SQLite (no data leaves your machine)
+
+This is a one-time process that takes a few moments.`,
+        { modal: true },
+        'Authorize Indexing'
+      );
+      
+      if (authorization !== 'Authorize Indexing') {
+        return; // User declined
+      }
+      
       // Generate a repository ID
       const repoId = crypto.createHash('sha256').update(repoPath).digest('hex').substring(0, 16);
       
@@ -78,11 +111,11 @@ export function activate(context: vscode.ExtensionContext) {
       await persistenceService.saveRepository(repository);
       
       // Show progress while indexing
-      vscode.window.withProgress({
+      await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
         title: `Indexing repository: ${repoName}`,
         cancellable: true
-      }, async (progress) => {
+      }, async (progress: vscode.Progress<{ message?: string; increment?: number }>) => {
         // Initialize the parser for TypeScript
         await codeParserService.initializeParser('typescript');
         
@@ -98,7 +131,34 @@ export function activate(context: vscode.ExtensionContext) {
         return 'Repository indexed successfully';
       });
       
-      vscode.window.showInformationMessage(`Repository ${repoName} indexed successfully`);
+      // Get counts for the magic moment toast
+      const elementCount = await persistenceService.getCodeElementCount(repoId);
+      const commitCount = await persistenceService.getCommitCount(repoId);
+      const decisionCount = await persistenceService.getDecisionCount(repoId);
+      
+      // Show the magic moment toast with actual counts
+      const magicMomentAction = await vscode.window.showInformationMessage(
+        `Indexing complete. ${elementCount} elements tracked. ${commitCount} commits analyzed. ${decisionCount} decisions linked (yet). Let's fix that.`,
+        'Create Decision'
+      );
+      
+      if (magicMomentAction === 'Create Decision') {
+        vscode.commands.executeCommand('arc.createDecisionRecord');
+        return;
+      }
+      
+      // Guide the user to the next step with a clear call-to-action
+      const nextAction = await vscode.window.showInformationMessage(
+        `Repository indexed successfully! ARC has generated an architecture diagram for your system.`,
+        'Explore Architecture', 
+        'Create Decision Record'
+      );
+      
+      if (nextAction === 'Create Decision Record') {
+        vscode.commands.executeCommand('arc.createDecisionRecord');
+      }
+      // Architecture panel is already open if they choose "Explore Architecture"
+      
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -159,7 +219,7 @@ export function activate(context: vscode.ExtensionContext) {
       };
       
       // Register a one-time save handler
-      const disposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+      const disposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc: vscode.TextDocument) => {
         if (savedDoc === document) {
           await saveDecision();
           disposable.dispose();
@@ -287,38 +347,34 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   
-  // Command: Show Architecture Panel
-  const showArchitecturePanelCommand = vscode.commands.registerCommand('arc.showArchitecturePanel', async () => {
-    try {
-      // Get the workspace folder
-      const workspaceFolders = vscode.workspace.workspaceFolders;
-      if (!workspaceFolders || workspaceFolders.length === 0) {
-        architecturePanel.show();
-        return;
+  // Command: Show Welcome
+  const showWelcomeCommand = vscode.commands.registerCommand('arc.showWelcome', () => {
+    // This command is primarily used as a completion event for the walkthrough
+    // Show a welcome message with next steps
+    vscode.window.showInformationMessage(
+      'Welcome to ARC! Start by indexing your repository to build a temporal knowledge graph.',
+      'Index Repository'
+    ).then((selection: string | undefined) => {
+      if (selection === 'Index Repository') {
+        vscode.commands.executeCommand('arc.indexRepository');
       }
-      
-      const workspaceFolder = workspaceFolders[0];
-      const repoPath = workspaceFolder.uri.fsPath;
-      const repoName = workspaceFolder.name;
-      
-      // Generate a repository ID
-      const repoId = crypto.createHash('sha256').update(repoPath).digest('hex').substring(0, 16);
-      
-      // Update the architecture panel
-      architecturePanel.show();
-      await architecturePanel.updateDiagram(repoId, repoName);
-    } catch (error) {
-      vscode.window.showErrorMessage(`Failed to show architecture: ${error instanceof Error ? error.message : String(error)}`);
-      architecturePanel.show();
-    }
+    });
   });
-  
+
+  // Command: Show Architecture Panel
+  const showArchitecturePanelCommand = vscode.commands.registerCommand('arc.showArchitecturePanel', () => {
+    architecturePanel.show();
+  });
+
   // Add commands to subscriptions
-  context.subscriptions.push(indexRepositoryCommand);
-  context.subscriptions.push(createDecisionRecordCommand);
-  context.subscriptions.push(linkDecisionToCodeCommand);
-  context.subscriptions.push(showContextPanelCommand);
-  context.subscriptions.push(showArchitecturePanelCommand);
+  context.subscriptions.push(
+    indexRepositoryCommand,
+    createDecisionRecordCommand,
+    linkDecisionToCodeCommand,
+    showContextPanelCommand,
+    showWelcomeCommand,
+    showArchitecturePanelCommand
+  );
   
   // Register tree data providers for the views
   vscode.window.registerTreeDataProvider('arcContextView', {
