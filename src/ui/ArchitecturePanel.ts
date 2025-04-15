@@ -135,6 +135,33 @@ export class ArchitecturePanel extends BaseWebviewPanel {
       <head>
         ${this.getCommonHeadHtml(this.panel.webview)}
         <title>ARC Architecture</title>
+        <style>
+          .diagram-legend {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+          }
+          .legend-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+          }
+          .legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+          }
+          .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+          }
+          .legend-icon {
+            margin-right: 4px;
+          }
+        </style>
       </head>
       <body>
         <div class="container">
@@ -145,6 +172,22 @@ export class ArchitecturePanel extends BaseWebviewPanel {
           
           <div class="diagram-container">
             ${diagramHtml}
+          </div>
+          
+          <div class="diagram-legend">
+            <div class="legend-title">Legend</div>
+            <div class="legend-items">
+              <div class="legend-item"><span class="legend-icon">📄</span> File</div>
+              <div class="legend-item"><span class="legend-icon">🧩</span> Class</div>
+              <div class="legend-item"><span class="legend-icon">⚙️</span> Function</div>
+              <div class="legend-item"><span class="legend-icon">📦</span> Module</div>
+              <div class="legend-item"><span class="legend-icon">🔍</span> Has Decision Records</div>
+            </div>
+            <div class="legend-items" style="margin-top: 8px;">
+              <div class="legend-item">→ Contains</div>
+              <div class="legend-item">⇒ Extends</div>
+              <div class="legend-item">--→ Uses</div>
+            </div>
           </div>
           
           <div class="next-steps">

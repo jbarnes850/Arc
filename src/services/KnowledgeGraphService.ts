@@ -57,7 +57,9 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       .map(element => ({
         id: element.elementId,
         type: element.type,
-        label: this.getLabelFromIdentifier(element.stableIdentifier)
+        label: this.getLabelFromIdentifier(element.stableIdentifier),
+        elementId: element.elementId,
+        hasDecisions: false // Default value, will be updated below
       }));
     
     // Create edges based on file/class relationships
@@ -80,6 +82,17 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
             target: element.elementId,
             type: 'contains'
           });
+        }
+      }
+    }
+    
+    // Add decision record information to nodes
+    for (const node of nodes) {
+      if (node.elementId) {
+        const version = await this.getLatestElementVersion(node.elementId);
+        if (version) {
+          const decisions = await this.getLinkedDecisions(version.versionId);
+          node.hasDecisions = decisions.length > 0;
         }
       }
     }
