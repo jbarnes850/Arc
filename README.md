@@ -59,6 +59,23 @@ ARC transforms your repo into **a living architectural memory**, where structura
 
 ---
 
+## Performance & Feature Flags
+
+- **Cold-index**: ≤ 7 s for 5 K LoC; ≤ 60 s for 100 K LoC  
+- **Incremental update** (≤ 200 changed files): < 5 s  
+- **`/memory.slice`** P95 ≤ 200 ms; payload ≤ 1 KB JSON  
+- **Context panel first paint**: ≤ 80 ms  
+- **Static Mermaid diagram** render: ≤ 300 ms
+
+> **Feature Flags**  
+> - `arc.enableWAL`: enable WAL & batch inserts  
+> - `arc.useWorkerPool`: offload parsing to worker threads  
+> - `arc.enableFileCache`: file-hash incremental parse  
+> - `arc.enableMCP`: expose secure MCP endpoints  
+> - `arc.encryptDB`: toggle DB encryption or ACL checks
+
+---
+
 ## Tech Stack
 
 - **Language:** TypeScript (VS Code extension)

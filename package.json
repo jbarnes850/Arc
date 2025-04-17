@@ -139,10 +139,10 @@
     "typescript": "^5.8.2",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@types/sqlite3": "^3.1.8"
+    "@types/better-sqlite3": "^7.1.0"
   },
   "dependencies": {
-    "sqlite3": "^5.1.7",
+    "better-sqlite3": "^8.2.0",
     "web-tree-sitter": "^0.20.8"
   }
 }

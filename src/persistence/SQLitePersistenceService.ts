@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as sqlite3 from 'sqlite3';
+import BetterSQLite3 from 'better-sqlite3';
+
 import { 
   IPersistenceService 
 } from './IPersistenceService';
@@ -24,7 +25,8 @@ type SQLiteError = {
  * SQLite implementation of the IPersistenceService
  */
 export class SQLitePersistenceService implements IPersistenceService {
-  private db: sqlite3.Database | null = null;
+  // Using `any` to allow legacy run/get/all calls; will refactor to Statement API later
+  private db: any = null;
   private dbPath: string;
 
   constructor(context: vscode.ExtensionContext) {
@@ -44,113 +46,93 @@ export class SQLitePersistenceService implements IPersistenceService {
   async initializeDatabase(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
-        // Enable verbose mode for debugging
-        sqlite3.verbose();
+        this.db = new BetterSQLite3(this.dbPath) as any;
+        this.db.pragma('journal_mode = WAL');
+        this.db.pragma('synchronous = NORMAL');
+        this.db.pragma('temp_store = MEMORY');
+        this.db.pragma('foreign_keys = ON');
+        const schema = `
+          -- Repositories table
+          CREATE TABLE IF NOT EXISTS repositories (
+            repo_id TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            name TEXT NOT NULL
+          );
+
+          -- Developers table
+          CREATE TABLE IF NOT EXISTS developers (
+            dev_id TEXT PRIMARY KEY,
+            name TEXT,
+            email TEXT NOT NULL UNIQUE
+          );
+
+          -- Commits table
+          CREATE TABLE IF NOT EXISTS commits (
+            commit_hash TEXT PRIMARY KEY,
+            message TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            author_dev_id TEXT NOT NULL,
+            committer_dev_id TEXT NOT NULL,
+            FOREIGN KEY (author_dev_id) REFERENCES developers (dev_id),
+            FOREIGN KEY (committer_dev_id) REFERENCES developers (dev_id)
+          );
+
+          -- Code elements table
+          CREATE TABLE IF NOT EXISTS code_elements (
+            element_id TEXT PRIMARY KEY,
+            repo_id TEXT NOT NULL,
+            type TEXT NOT NULL,
+            stable_identifier TEXT NOT NULL,
+            FOREIGN KEY (repo_id) REFERENCES repositories (repo_id),
+            UNIQUE (repo_id, stable_identifier)
+          );
+
+          -- Code element versions table
+          CREATE TABLE IF NOT EXISTS code_element_versions (
+            version_id TEXT PRIMARY KEY,
+            element_id TEXT NOT NULL,
+            commit_hash TEXT NOT NULL,
+            name TEXT,
+            start_line INTEGER,
+            end_line INTEGER,
+            previous_version_id TEXT,
+            FOREIGN KEY (element_id) REFERENCES code_elements (element_id),
+            FOREIGN KEY (commit_hash) REFERENCES commits (commit_hash),
+            FOREIGN KEY (previous_version_id) REFERENCES code_element_versions (version_id)
+          );
+
+          -- Decision records table
+          CREATE TABLE IF NOT EXISTS decision_records (
+            decision_id TEXT PRIMARY KEY,
+            repo_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            author_dev_id TEXT,
+            FOREIGN KEY (repo_id) REFERENCES repositories (repo_id),
+            FOREIGN KEY (author_dev_id) REFERENCES developers (dev_id)
+          );
+
+          -- Decision references code table (for REFERENCES relationship)
+          CREATE TABLE IF NOT EXISTS decision_references_code (
+            decision_id TEXT NOT NULL,
+            version_id TEXT NOT NULL,
+            PRIMARY KEY (decision_id, version_id),
+            FOREIGN KEY (decision_id) REFERENCES decision_records (decision_id),
+            FOREIGN KEY (version_id) REFERENCES code_element_versions (version_id)
+          );
+
+          -- Create indexes for better query performance
+          CREATE INDEX IF NOT EXISTS idx_code_elements_repo_id ON code_elements (repo_id);
+          CREATE INDEX IF NOT EXISTS idx_code_element_versions_element_id ON code_element_versions (element_id);
+          CREATE INDEX IF NOT EXISTS idx_code_element_versions_commit_hash ON code_element_versions (commit_hash);
+          CREATE INDEX IF NOT EXISTS idx_decision_records_repo_id ON decision_records (repo_id);
+        `;
         
-        // Create or open the database
-        this.db = new sqlite3.Database(this.dbPath, (err: SQLiteError) => {
-          if (err) {
-            reject(new Error(`Failed to open database: ${err.message}`));
-            return;
-          }
-          
-          // Enable foreign keys
-          this.db!.run('PRAGMA foreign_keys = ON', (err: SQLiteError) => {
-            if (err) {
-              reject(new Error(`Failed to enable foreign keys: ${err.message}`));
-              return;
-            }
-            
-            // Create tables
-            const schema = `
-              -- Repositories table
-              CREATE TABLE IF NOT EXISTS repositories (
-                repo_id TEXT PRIMARY KEY,
-                path TEXT NOT NULL,
-                name TEXT NOT NULL
-              );
-
-              -- Developers table
-              CREATE TABLE IF NOT EXISTS developers (
-                dev_id TEXT PRIMARY KEY,
-                name TEXT,
-                email TEXT NOT NULL UNIQUE
-              );
-
-              -- Commits table
-              CREATE TABLE IF NOT EXISTS commits (
-                commit_hash TEXT PRIMARY KEY,
-                message TEXT NOT NULL,
-                timestamp INTEGER NOT NULL,
-                author_dev_id TEXT NOT NULL,
-                committer_dev_id TEXT NOT NULL,
-                FOREIGN KEY (author_dev_id) REFERENCES developers (dev_id),
-                FOREIGN KEY (committer_dev_id) REFERENCES developers (dev_id)
-              );
-
-              -- Code elements table
-              CREATE TABLE IF NOT EXISTS code_elements (
-                element_id TEXT PRIMARY KEY,
-                repo_id TEXT NOT NULL,
-                type TEXT NOT NULL,
-                stable_identifier TEXT NOT NULL,
-                FOREIGN KEY (repo_id) REFERENCES repositories (repo_id),
-                UNIQUE (repo_id, stable_identifier)
-              );
-
-              -- Code element versions table
-              CREATE TABLE IF NOT EXISTS code_element_versions (
-                version_id TEXT PRIMARY KEY,
-                element_id TEXT NOT NULL,
-                commit_hash TEXT NOT NULL,
-                name TEXT,
-                start_line INTEGER,
-                end_line INTEGER,
-                previous_version_id TEXT,
-                FOREIGN KEY (element_id) REFERENCES code_elements (element_id),
-                FOREIGN KEY (commit_hash) REFERENCES commits (commit_hash),
-                FOREIGN KEY (previous_version_id) REFERENCES code_element_versions (version_id)
-              );
-
-              -- Decision records table
-              CREATE TABLE IF NOT EXISTS decision_records (
-                decision_id TEXT PRIMARY KEY,
-                repo_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at INTEGER NOT NULL,
-                author_dev_id TEXT,
-                FOREIGN KEY (repo_id) REFERENCES repositories (repo_id),
-                FOREIGN KEY (author_dev_id) REFERENCES developers (dev_id)
-              );
-
-              -- Decision references code table (for REFERENCES relationship)
-              CREATE TABLE IF NOT EXISTS decision_references_code (
-                decision_id TEXT NOT NULL,
-                version_id TEXT NOT NULL,
-                PRIMARY KEY (decision_id, version_id),
-                FOREIGN KEY (decision_id) REFERENCES decision_records (decision_id),
-                FOREIGN KEY (version_id) REFERENCES code_element_versions (version_id)
-              );
-
-              -- Create indexes for better query performance
-              CREATE INDEX IF NOT EXISTS idx_code_elements_repo_id ON code_elements (repo_id);
-              CREATE INDEX IF NOT EXISTS idx_code_element_versions_element_id ON code_element_versions (element_id);
-              CREATE INDEX IF NOT EXISTS idx_code_element_versions_commit_hash ON code_element_versions (commit_hash);
-              CREATE INDEX IF NOT EXISTS idx_decision_records_repo_id ON decision_records (repo_id);
-            `;
-            
-            this.db!.exec(schema, (err: SQLiteError) => {
-              if (err) {
-                reject(new Error(`Failed to create schema: ${err.message}`));
-                return;
-              }
-              
-              console.log('Database initialized successfully');
-              resolve();
-            });
-          });
-        });
+        const batch = this.db.transaction(() => this.db.exec(schema));
+        batch();
+        console.log('Database initialized successfully');
+        resolve();
       } catch (error) {
         console.error('Error initializing database:', error);
         reject(error);

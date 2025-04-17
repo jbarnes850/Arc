@@ -1,4 +1,10 @@
 # ARC V1 SQLite Schema Documentation
+**Performance Tuning and Targets**
+- PRAGMAs:
+  - `journal_mode = WAL`
+  - `synchronous = NORMAL`
+  - `temp_store = MEMORY`
+- Micro-benchmark target: ≥ 25 k rows/s
 
 This document provides detailed information about the SQLite schema used by ARC V1 to implement the Temporal Knowledge Graph.
 
