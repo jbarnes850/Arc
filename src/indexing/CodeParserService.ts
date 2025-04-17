@@ -1,10 +1,11 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import Parser from 'web-tree-sitter';
 import { ICodeParserService } from './ICodeParserService';
 import { CodeElement } from '../models/types';
+
+const extensionPath = path.resolve(__dirname, '../../');
 
 /**
  * Implementation of ICodeParserService using tree-sitter
@@ -31,7 +32,7 @@ export class CodeParserService implements ICodeParserService {
       
       // Load the language grammar
       const wasmPath = path.join(
-        vscode.extensions.getExtension('arc')?.extensionPath || '',
+        extensionPath,
         'node_modules',
         'web-tree-sitter',
         `tree-sitter-${language}.wasm`

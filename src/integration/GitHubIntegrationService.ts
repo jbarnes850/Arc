@@ -1,10 +1,10 @@
-import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as util from 'util';
 import * as crypto from 'crypto';
 import { IGitHubIntegrationService } from './IGitHubIntegrationService';
 import { IPersistenceService } from '../persistence/IPersistenceService';
 import { Commit, Developer } from '../models/types';
+import { showInformationMessage, showErrorMessage } from '../utils/vscodeAdapter';
 
 /**
  * Implementation of IGitHubIntegrationService using Git CLI
@@ -75,9 +75,9 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
         await this.processChangedFiles(repoPath, repoId, hash);
       }
       
-      vscode.window.showInformationMessage(`Indexed ${commits.length} commits from repository`);
+      showInformationMessage(`Indexed ${commits.length} commits from repository`);
     } catch (error) {
-      vscode.window.showErrorMessage(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
+      showErrorMessage(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

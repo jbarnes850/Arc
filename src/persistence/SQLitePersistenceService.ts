@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import BetterSQLite3 from 'better-sqlite3';
@@ -29,7 +28,7 @@ export class SQLitePersistenceService implements IPersistenceService {
   private db: any = null;
   private dbPath: string;
 
-  constructor(context: vscode.ExtensionContext) {
+  constructor(context: any) {
     // Store the database in the extension's global storage path
     this.dbPath = path.join(context.globalStorageUri.fsPath, 'arc-knowledge-graph.db');
     
@@ -46,6 +45,7 @@ export class SQLitePersistenceService implements IPersistenceService {
   async initializeDatabase(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
+        // Instantiate DB
         this.db = new BetterSQLite3(this.dbPath) as any;
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('synchronous = NORMAL');

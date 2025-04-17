@@ -1,6 +1,5 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import * as vscode from 'vscode';
 import { IKnowledgeGraphService } from './IKnowledgeGraphService';
 import { IPersistenceService } from '../persistence/IPersistenceService';
 import { ICodeParserService } from '../indexing/ICodeParserService';
