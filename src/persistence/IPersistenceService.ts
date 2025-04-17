@@ -27,6 +27,11 @@ export interface IPersistenceService {
   saveCodeElement(codeElement: CodeElement): Promise<void>;
   getCodeElement(elementId: string): Promise<CodeElement | null>;
   getCodeElementByIdentifier(repoId: string, stableIdentifier: string): Promise<CodeElement | null>;
+  /**
+   * List all code elements in a repository
+   * @param repoId Repository ID
+   */
+  getAllCodeElements(repoId: string): Promise<CodeElement[]>;
   
   // CodeElementVersion operations
   saveCodeElementVersion(version: CodeElementVersion): Promise<void>;
@@ -42,6 +47,10 @@ export interface IPersistenceService {
   // Relationship operations
   linkDecisionToCodeVersion(decisionId: string, versionId: string): Promise<void>;
   linkVersionToPreviousVersion(versionId: string, previousVersionId: string): Promise<void>;
+  
+  // File-hash cache operations
+  saveFileHash(repoId: string, filePath: string, fileHash: string): Promise<void>;
+  getFileHash(repoId: string, filePath: string): Promise<string | null>;
   
   // Database initialization
   initializeDatabase(): Promise<void>;

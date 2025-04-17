@@ -112,7 +112,18 @@
           }
         ]
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "ARC extension settings",
+      "properties": {
+        "arc.enableFileCache": { "type": "boolean", "default": true, "description": "Enable file-hash incremental parsing (dirty-file cache)" },
+        "arc.enableWAL": { "type": "boolean", "default": true, "description": "Enable SQLite WAL journal mode and batch inserts" },
+        "arc.useWorkerPool": { "type": "boolean", "default": false, "description": "Offload parsing to a worker_threads pool" },
+        "arc.enableMCP": { "type": "boolean", "default": false, "description": "Expose secure MCP endpoints" },
+        "arc.encryptDB": { "type": "boolean", "default": false, "description": "Encrypt the database with SQLCipher" }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",

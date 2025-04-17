@@ -122,6 +122,16 @@ export class SQLitePersistenceService implements IPersistenceService {
             FOREIGN KEY (version_id) REFERENCES code_element_versions (version_id)
           );
 
+          -- File hashes table
+          CREATE TABLE IF NOT EXISTS file_hashes (
+            repo_id TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_hash TEXT NOT NULL,
+            PRIMARY KEY (repo_id, file_path),
+            FOREIGN KEY (repo_id) REFERENCES repositories(repo_id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_file_hashes_repo_id ON file_hashes(repo_id);
+
           -- Create indexes for better query performance
           CREATE INDEX IF NOT EXISTS idx_code_elements_repo_id ON code_elements (repo_id);
           CREATE INDEX IF NOT EXISTS idx_code_element_versions_element_id ON code_element_versions (element_id);
@@ -407,6 +417,26 @@ export class SQLitePersistenceService implements IPersistenceService {
           type: row.type as 'file' | 'class' | 'function',
           stableIdentifier: row.stable_identifier
         });
+      });
+    });
+  }
+
+  /**
+   * List all code elements in a repository
+   */
+  async getAllCodeElements(repoId: string): Promise<CodeElement[]> {
+    return new Promise<CodeElement[]>((resolve, reject) => {
+      if (!this.db) { reject(new Error('Database not initialized')); return; }
+      const sql = `SELECT * FROM code_elements WHERE repo_id = ?`;
+      this.db.all(sql, [repoId], (err: any, rows: any[]) => {
+        if (err) { reject(err); return; }
+        const elements = rows.map(row => ({
+          elementId: row.element_id,
+          repoId: row.repo_id,
+          type: row.type as 'file' | 'class' | 'function',
+          stableIdentifier: row.stable_identifier
+        }));
+        resolve(elements);
       });
     });
   }
@@ -701,6 +731,50 @@ export class SQLitePersistenceService implements IPersistenceService {
           return;
         }
         resolve();
+      });
+    });
+  }
+
+  // File-hash cache operations
+  async saveFileHash(repoId: string, filePath: string, fileHash: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        INSERT OR REPLACE INTO file_hashes (repo_id, file_path, file_hash)
+        VALUES (?, ?, ?)
+      `;
+
+      this.db.run(sql, [repoId, filePath, fileHash], (err: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  async getFileHash(repoId: string, filePath: string): Promise<string | null> {
+    return new Promise<string | null>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        SELECT file_hash FROM file_hashes WHERE repo_id = ? AND file_path = ?
+      `;
+
+      this.db.get(sql, [repoId, filePath], (err: any, row: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(row ? row.file_hash : null);
       });
     });
   }

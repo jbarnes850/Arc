@@ -1,4 +1,6 @@
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as vscode from 'vscode';
 import { IKnowledgeGraphService } from './IKnowledgeGraphService';
 import { IPersistenceService } from '../persistence/IPersistenceService';
 import { ICodeParserService } from '../indexing/ICodeParserService';
@@ -9,11 +11,17 @@ import { Commit, CodeElement, CodeElementVersion, DecisionRecord } from '../mode
  * Implementation of IKnowledgeGraphService that connects Git history with code structure
  */
 export class KnowledgeGraphService implements IKnowledgeGraphService {
+  private enableFileCache: boolean;
+  private static MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB max file size for parsing
+
   constructor(
     private persistenceService: IPersistenceService,
     private codeParserService: ICodeParserService,
-    private gitService: IGitHubIntegrationService
-  ) {}
+    private gitService: IGitHubIntegrationService,
+    enableFileCache: boolean = false
+  ) {
+    this.enableFileCache = enableFileCache;
+  }
 
   /**
    * Get the commit history for a code element
@@ -44,63 +52,37 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
    * Get data for generating an architecture diagram
    * @param repoId ID of the repository
    */
-  async getArchitectureDiagramData(repoId: string): Promise<any> {
-    // This is a simplified implementation for the architecture diagram
-    // In a real implementation, we would analyze the code structure more deeply
-    
-    // Get all code elements for the repository
-    const elements = await this.getCodeElementsForRepo(repoId);
-    
-    // Create nodes for files and classes
-    const nodes = elements
-      .filter(element => element.type === 'file' || element.type === 'class')
-      .map(element => ({
-        id: element.elementId,
-        type: element.type,
-        label: this.getLabelFromIdentifier(element.stableIdentifier),
-        elementId: element.elementId,
-        hasDecisions: false // Default value, will be updated below
-      }));
-    
-    // Create edges based on file/class relationships
-    // This is a simplified approach - in a real implementation we would
-    // analyze imports, dependencies, etc.
-    const edges: Array<{source: string, target: string, type: string}> = [];
-    
-    // For each class, create an edge to its containing file
-    for (const element of elements) {
+  async getArchitectureDiagramData(repoId: string): Promise<{nodes: any[]; edges: any[]}> {
+    // Fetch all code elements from persistence
+    const elements = await this.persistenceService.getAllCodeElements(repoId);
+    // Prepare nodes for files and classes
+    const nodes = elements.map(element => ({
+      id: element.elementId,
+      type: element.type,
+      label: this.getLabelFromIdentifier(element.stableIdentifier),
+      elementId: element.elementId,
+      hasDecisions: false
+    }));
+    // Build containment edges (class -> file)
+    const edges: Array<{source: string; target: string; type: string}> = [];
+    elements.forEach(element => {
       if (element.type === 'class') {
-        const fileIdentifier = this.getFileFromIdentifier(element.stableIdentifier);
-        const fileElement = elements.find(e => 
-          e.type === 'file' && 
-          this.getFileFromIdentifier(e.stableIdentifier) === fileIdentifier
-        );
-        
+        const filePath = element.stableIdentifier.split(':')[0];
+        const fileElement = elements.find(e => e.type === 'file' && e.stableIdentifier === filePath);
         if (fileElement) {
-          edges.push({
-            source: fileElement.elementId,
-            target: element.elementId,
-            type: 'contains'
-          });
+          edges.push({source: fileElement.elementId, target: element.elementId, type: 'contains'});
         }
       }
-    }
-    
-    // Add decision record information to nodes
+    });
+    // Decorate nodes with decision flags
     for (const node of nodes) {
-      if (node.elementId) {
-        const version = await this.getLatestElementVersion(node.elementId);
-        if (version) {
-          const decisions = await this.getLinkedDecisions(version.versionId);
-          node.hasDecisions = decisions.length > 0;
-        }
+      const version = await this.persistenceService.findLatestCodeElementVersion(node.elementId);
+      if (version) {
+        const decisions = await this.persistenceService.findDecisionRecordsLinkedToVersion(version.versionId);
+        node.hasDecisions = decisions.length > 0;
       }
     }
-    
-    return {
-      nodes,
-      edges
-    };
+    return {nodes, edges};
   }
 
   /**
@@ -126,14 +108,36 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     
     // Process each changed file
     for (const filePath of changedFiles) {
-      // Only process files that can be parsed
-      if (!this.codeParserService.canParseFile(filePath)) {
+      const fullPath = `${repoPath}/${filePath}`;
+      
+      // Skip files that exceed size limit
+      try {
+        const stats = fs.statSync(fullPath);
+        if (stats.size > KnowledgeGraphService.MAX_FILE_SIZE_BYTES) { continue; }
+      } catch {
+        // if stat fails, skip
         continue;
       }
       
-      // Get the full path to the file
-      const fullPath = `${repoPath}/${filePath}`;
+      // Skip unparseable files
+      if (!this.codeParserService.canParseFile(fullPath)) {
+        continue;
+      }
       
+      // File-cache: compute hash as string
+      let fileHash: string | undefined;
+      if (this.enableFileCache) {
+        try {
+          const content = fs.readFileSync(fullPath, 'utf8');
+          fileHash = crypto.createHash('sha1').update(content).digest('hex');
+          const last = await this.persistenceService.getFileHash(repoId, fullPath);
+          if (last === fileHash) { continue; }
+        } catch {
+          // ignore and parse
+        }
+      }
+      
+      // Get the full path to the file
       // Parse the file to get code elements
       const codeElements = await this.codeParserService.parseFile(fullPath, repoId);
       
@@ -166,6 +170,11 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
             previousVersions[0].versionId
           );
         }
+      }
+      
+      // Save updated hash
+      if (this.enableFileCache && fileHash) {
+        await this.persistenceService.saveFileHash(repoId, fullPath, fileHash);
       }
     }
   }

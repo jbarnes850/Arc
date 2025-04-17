@@ -115,7 +115,13 @@ This is a one-time process that takes a few moments.`,
         location: vscode.ProgressLocation.Notification,
         title: `Indexing repository: ${repoName}`,
         cancellable: true
-      }, async (progress: vscode.Progress<{ message?: string; increment?: number }>) => {
+      }, async (progress: vscode.Progress<{ message?: string; increment?: number }>, token: vscode.CancellationToken) => {
+        // Handle user cancellation
+        token.onCancellationRequested(() => {
+          vscode.window.showWarningMessage('Indexing cancelled by user');
+          throw new Error('Indexing cancelled');
+        });
+        
         // Initialize the parser for TypeScript
         await codeParserService.initializeParser('typescript');
         
