@@ -142,6 +142,7 @@
   "devDependencies": {
     "@types/node": "^20.x",
     "@types/vscode": "^1.96.0",
+    "@types/yargs": "^17.0.13",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
     "@typescript-eslint/parser": "^8.28.0",
     "eslint": "^9.23.0",
@@ -154,6 +155,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^8.2.0",
-    "web-tree-sitter": "^0.20.8"
+    "web-tree-sitter": "^0.20.8",
+    "yargs": "^17.7.2"
   }
 }

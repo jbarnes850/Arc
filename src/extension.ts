@@ -53,10 +53,16 @@ export function activate(context: vscode.ExtensionContext) {
   // Create services
   const codeParserService: ICodeParserService = new CodeParserService();
   const gitService: IGitHubIntegrationService = new GitHubIntegrationService(persistenceService);
+  
+  // Read user settings for feature flags
+  const config = vscode.workspace.getConfiguration('arc');
+  const enableFileCache = config.get<boolean>('enableFileCache', true);
+  
   const knowledgeGraphService: IKnowledgeGraphService = new KnowledgeGraphService(
     persistenceService,
     codeParserService,
-    gitService
+    gitService,
+    enableFileCache
   );
   const decisionRecordService: IDecisionRecordService = new DecisionRecordService(persistenceService);
   const diagramGenerator: IArchitectureDiagramGenerator = new ArchitectureDiagramGenerator(knowledgeGraphService);

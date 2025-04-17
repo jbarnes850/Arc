@@ -13,8 +13,11 @@ export class ArchitectureDiagramGenerator implements IArchitectureDiagramGenerat
    * @returns HTML/SVG content for the diagram
    */
   async generateDiagram(repoId: string): Promise<string> {
-    // Get the diagram data from the knowledge graph
     const data = await this.getDiagramData(repoId);
+    const { nodes, edges } = data;
+    if (nodes.length === 0) {
+      return `<div>No code elements found. Have you indexed your repository?</div>`;
+    }
     
     // Generate a Mermaid.js diagram definition
     const mermaidDefinition = this.generateMermaidDefinition(data);
