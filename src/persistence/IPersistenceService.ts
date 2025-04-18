@@ -66,4 +66,7 @@ export interface IPersistenceService {
   getCodeElementCount(repoId: string): Promise<number>;
   getCommitCount(repoId: string): Promise<number>;
   getDecisionCount(repoId: string): Promise<number>;
+
+  // Connection management
+  closeConnection(): Promise<void>;
 }

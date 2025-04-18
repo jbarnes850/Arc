@@ -24,7 +24,14 @@ import { DecisionCaptureProvider } from './ui/DecisionCaptureProvider';
 import { IndexProgressProvider } from './ui/IndexProgressProvider';
 import { ArchitectureStatusBarItem } from './ui/ArchitectureStatusBarItem';
 import { HoverDiffProvider } from './ui/HoverDiffProvider';
+import { MemoryMonitor } from './utils/MemoryMonitor';
 import { Repository } from './models/types';
+
+// Declare global variables for resource management
+declare global {
+  var persistenceService: IPersistenceService;
+  var memoryMonitor: MemoryMonitor;
+}
 
 // This method is called when your extension is activated
 export function activate(context: vscode.ExtensionContext) {
@@ -83,6 +90,14 @@ export function activate(context: vscode.ExtensionContext) {
   const indexProgressProvider = IndexProgressProvider.getInstance(context);
   const architectureStatusBarItem = ArchitectureStatusBarItem.getInstance(context);
   const hoverDiffProvider = HoverDiffProvider.getInstance(context, knowledgeGraphService, decisionRecordService);
+  const memoryMonitor = MemoryMonitor.getInstance(context);
+
+  // Store services in global variables for cleanup
+  global.persistenceService = persistenceService;
+  global.memoryMonitor = memoryMonitor;
+
+  // Start memory monitoring
+  memoryMonitor.startMonitoring();
 
   // Show the status bar items
   indexProgressProvider.show();
@@ -425,6 +440,11 @@ This is a one-time process that takes a few moments.`,
     }
   });
 
+  // Command: Show Memory Status
+  const showMemoryStatusCommand = vscode.commands.registerCommand('arc.showMemoryStatus', () => {
+    memoryMonitor.showMemoryStatus();
+  });
+
   // Add commands to subscriptions
   context.subscriptions.push(
     indexRepositoryCommand,
@@ -435,7 +455,8 @@ This is a one-time process that takes a few moments.`,
     showArchitecturePanelCommand,
     getRepositoriesCommand,
     getCodeElementsCommand,
-    showCommitDiffCommand
+    showCommitDiffCommand,
+    showMemoryStatusCommand
   );
 
   // Register tree data providers for the views
@@ -493,8 +514,63 @@ async function countLinesOfCode(repoPath: string): Promise<number> {
   }
 }
 
+// Global variables for resource management
+let databaseCleanupPromise: Promise<void> | null = null;
+let isDeactivating = false;
+
 // This method is called when your extension is deactivated
-export function deactivate() {
-  console.log('ARC extension is now deactivated');
-  // Cleanup will be implemented here
+export function deactivate(): Promise<void> {
+  console.log('ARC extension is now deactivating...');
+  isDeactivating = true;
+
+  // If we already have a cleanup promise, return it
+  if (databaseCleanupPromise) {
+    return databaseCleanupPromise;
+  }
+
+  // Create a new cleanup promise
+  databaseCleanupPromise = new Promise<void>(async (resolve) => {
+    try {
+      // Perform cleanup tasks
+      console.log('Cleaning up resources...');
+
+      // Stop memory monitoring
+      if (global.memoryMonitor) {
+        global.memoryMonitor.dispose();
+        delete global.memoryMonitor;
+      }
+
+      // Close database connections
+      if (global.persistenceService) {
+        try {
+          // Call a method to ensure the connection is closed
+          await global.persistenceService.closeConnection();
+          console.log('Database connection closed successfully');
+        } catch (error) {
+          console.error('Error closing database connection:', error);
+        }
+        delete global.persistenceService;
+      }
+
+      // Run garbage collection if available
+      try {
+        // @ts-ignore - gc might be available in some Node.js environments
+        if (typeof global.gc === 'function') {
+          console.log('Running final garbage collection...');
+          // @ts-ignore
+          global.gc();
+        }
+      } catch (error) {
+        console.error('Error running garbage collection:', error);
+      }
+
+      console.log('ARC extension is now deactivated');
+      resolve();
+    } catch (error) {
+      console.error('Error during deactivation:', error);
+      resolve(); // Resolve anyway to prevent hanging
+    }
+  });
+
+  return databaseCleanupPromise;
 }

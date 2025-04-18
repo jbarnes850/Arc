@@ -54,6 +54,10 @@
       {
         "command": "arc.showContextPanel",
         "title": "ARC: Show Context Panel"
+      },
+      {
+        "command": "arc.showMemoryStatus",
+        "title": "ARC: Show Memory Status"
       }
     ],
     "viewsContainers": {

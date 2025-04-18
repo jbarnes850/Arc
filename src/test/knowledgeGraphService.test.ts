@@ -266,6 +266,10 @@ class MockPersistenceService implements IPersistenceService {
     }
     return Promise.resolve(count);
   }
+
+  async closeConnection(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 // Create a mock code parser service for testing

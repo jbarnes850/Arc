@@ -227,6 +227,10 @@ class MockPersistenceService implements IPersistenceService {
     const key = `${repoId}:${filePath}`;
     return this.fileHashes.get(key) || null;
   }
+
+  async closeConnection(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /**

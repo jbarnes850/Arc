@@ -42,7 +42,9 @@ suite('GitHubIntegrationService Test Suite', () => {
       // Add count methods
       getCodeElementCount: async () => 0,
       getCommitCount: async () => 0,
-      getDecisionCount: async () => 0
+      getDecisionCount: async () => 0,
+      // Connection management
+      closeConnection: async () => {}
     };
 
     // Initialize the integration service with our minimal mock

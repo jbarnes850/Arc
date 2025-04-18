@@ -1089,4 +1089,28 @@ export class SQLitePersistenceService implements IPersistenceService {
       );
     });
   }
+
+  /**
+   * Close the database connection
+   */
+  async closeConnection(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!this.db) {
+        // No connection to close
+        resolve();
+        return;
+      }
+
+      try {
+        // Close the database connection
+        this.db.close();
+        this.db = null;
+        console.log('Database connection closed');
+        resolve();
+      } catch (error) {
+        console.error('Error closing database connection:', error);
+        reject(error);
+      }
+    });
+  }
 }
