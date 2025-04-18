@@ -28,55 +28,115 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
       );
 
       const commits = stdout.split('\n').filter(line => line.trim() !== '');
+      console.log(`Found ${commits.length} commits in repository`);
 
-      // Process each commit
-      for (const commitLine of commits) {
-        const [
-          hash,
-          authorName,
-          authorEmail,
-          committerName,
-          committerEmail,
-          timestamp,
-          message
-        ] = commitLine.split('|');
+      // Process commits in batches to reduce memory usage
+      const batchSize = 10; // Process 10 commits at a time
+      let processedCount = 0;
 
-        // Create or get developers
-        const authorDevId = this.generateDevId(authorEmail);
-        const committerDevId = this.generateDevId(committerEmail);
-
-        // Save developers
-        await this.persistenceService.saveDeveloper({
-          devId: authorDevId,
-          name: authorName,
-          email: authorEmail
-        });
-
-        if (authorEmail !== committerEmail) {
-          await this.persistenceService.saveDeveloper({
-            devId: committerDevId,
-            name: committerName,
-            email: committerEmail
-          });
-        }
-
-        // Save commit
-        const commit: Commit = {
-          commitHash: hash,
-          repoId,
-          message,
-          timestamp: parseInt(timestamp, 10) * 1000, // Convert to milliseconds
-          authorDevId,
-          committerDevId
-        };
-
-        await this.persistenceService.saveCommit(commit);
-
-        // Get changed files for this commit
-        await this.processChangedFiles(repoPath, repoId, hash);
+      // Update global progress provider if available
+      if ((global as any).indexProgressProvider) {
+        (global as any).indexProgressProvider.updateProgress(0);
+        (global as any).indexProgressProvider.updateStage('Analyzing commit history');
       }
 
-      console.log(`Indexed ${commits.length} commits from repository`);
+      for (let i = 0; i < commits.length; i += batchSize) {
+        // Get current batch
+        const batch = commits.slice(i, Math.min(i + batchSize, commits.length));
+
+        // Update progress with stage information
+        const progress = Math.round((i / commits.length) * 100);
+        if ((global as any).indexProgressProvider) {
+          (global as any).indexProgressProvider.updateProgress(progress);
+          (global as any).indexProgressProvider.updateStage(
+            `Indexing commits (${i + 1}-${Math.min(i + batchSize, commits.length)} of ${commits.length})`
+          );
+        }
+
+        // Process batch
+        for (const commitLine of batch) {
+          try {
+            const [
+              hash,
+              authorName,
+              authorEmail,
+              committerName,
+              committerEmail,
+              timestamp,
+              message
+            ] = commitLine.split('|');
+
+            // Create or get developers
+            const authorDevId = this.generateDevId(authorEmail);
+            const committerDevId = this.generateDevId(committerEmail);
+
+            // Save developers
+            await this.persistenceService.saveDeveloper({
+              devId: authorDevId,
+              name: authorName,
+              email: authorEmail
+            });
+
+            if (authorEmail !== committerEmail) {
+              await this.persistenceService.saveDeveloper({
+                devId: committerDevId,
+                name: committerName,
+                email: committerEmail
+              });
+            }
+
+            // Save commit
+            const commit: Commit = {
+              commitHash: hash,
+              repoId,
+              message,
+              timestamp: parseInt(timestamp, 10) * 1000, // Convert to milliseconds
+              authorDevId,
+              committerDevId
+            };
+
+            await this.persistenceService.saveCommit(commit);
+
+            // Get changed files for this commit
+            await this.processChangedFiles(repoPath, repoId, hash);
+
+            processedCount++;
+          } catch (commitError) {
+            console.error(`Error processing commit: ${commitError instanceof Error ? commitError.message : String(commitError)}`);
+            // Continue with next commit instead of failing the entire batch
+          }
+        }
+
+        // Allow UI to update and garbage collection to run
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Run garbage collection if available
+        if ((global as any).memoryMonitor) {
+          (global as any).memoryMonitor.checkMemoryUsage();
+        }
+
+        // Clear caches periodically
+        if (i > 0 && i % 50 === 0 && (global as any).persistenceService) {
+          try {
+            if (typeof (global as any).persistenceService.clearCaches === 'function') {
+              (global as any).persistenceService.clearCaches();
+              console.log('Cleared caches after processing 50 commits');
+            }
+          } catch (cacheError) {
+            console.error('Error clearing caches:', cacheError);
+          }
+        }
+      }
+
+      console.log(`Indexed ${processedCount} commits from repository`);
+
+      // Final progress update
+      if ((global as any).indexProgressProvider) {
+        (global as any).indexProgressProvider.updateProgress(100);
+        (global as any).indexProgressProvider.updateStage('Commit indexing complete');
+      }
+
+      return;
     } catch (error) {
       console.error(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
@@ -91,13 +151,18 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
    */
   private async processChangedFiles(repoPath: string, repoId: string, commitHash: string): Promise<void> {
     try {
-      // Get list of files changed in this commit
+      // Get list of files changed in this commit with a timeout
       const { stdout } = await this.execPromise(
         `git show --name-only --pretty=format: ${commitHash}`,
-        { cwd: repoPath }
+        { cwd: repoPath, timeout: 10000 } // 10 second timeout
       );
 
       const changedFiles = stdout.split('\n').filter(line => line.trim() !== '');
+
+      // Log the number of changed files
+      if (changedFiles.length > 0) {
+        console.log(`Commit ${commitHash.substring(0, 7)} changed ${changedFiles.length} files`);
+      }
 
       // Store the information about changed files
       // This will be used by the code parser to create CodeElement and CodeElementVersion entities
@@ -106,6 +171,7 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
       return;
     } catch (error) {
       console.error(`Error processing changed files for commit ${commitHash}:`, error);
+      // Don't throw the error, just log it and continue
     }
   }
 

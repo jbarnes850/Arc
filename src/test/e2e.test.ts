@@ -231,6 +231,10 @@ class MockPersistenceService implements IPersistenceService {
   async closeConnection(): Promise<void> {
     return Promise.resolve();
   }
+
+  clearCaches(): void {
+    // No-op for mock
+  }
 }
 
 /**

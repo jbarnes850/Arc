@@ -69,4 +69,5 @@ export interface IPersistenceService {
 
   // Connection management
   closeConnection(): Promise<void>;
+  clearCaches(): void;
 }

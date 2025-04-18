@@ -59,6 +59,7 @@ suite('Repository IDs Test Suite', function() {
     async getCommitCount(): Promise<number> { return Promise.resolve(0); }
     async getDecisionCount(): Promise<number> { return Promise.resolve(0); }
     async closeConnection(): Promise<void> { return Promise.resolve(); }
+    clearCaches(): void { /* No-op for mock */ }
   }
 
   // Test repository path

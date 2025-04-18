@@ -92,9 +92,10 @@ export function activate(context: vscode.ExtensionContext) {
   const hoverDiffProvider = HoverDiffProvider.getInstance(context, knowledgeGraphService, decisionRecordService);
   const memoryMonitor = MemoryMonitor.getInstance(context);
 
-  // Store services in global variables for cleanup
+  // Store services in global variables for cleanup and access
   global.persistenceService = persistenceService;
   global.memoryMonitor = memoryMonitor;
+  global.indexProgressProvider = indexProgressProvider;
 
   // Start memory monitoring
   memoryMonitor.startMonitoring();

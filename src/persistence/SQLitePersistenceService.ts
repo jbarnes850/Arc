@@ -30,19 +30,34 @@ export class SQLitePersistenceService implements IPersistenceService {
   private dbPath: string;
 
   constructor(contextOrPath: any) {
-    // Check if we're given a direct path or a VS Code extension context
-    if (typeof contextOrPath === 'string') {
-      // Direct path to the database file
-      this.dbPath = contextOrPath;
-    } else {
-      // VS Code extension context
-      this.dbPath = path.join(contextOrPath.globalStorageUri.fsPath, 'arc-knowledge-graph.db');
-    }
+    try {
+      // Check if we're given a direct path or a VS Code extension context
+      if (typeof contextOrPath === 'string') {
+        // Direct path to the database file
+        this.dbPath = contextOrPath;
+      } else if (contextOrPath && contextOrPath.globalStorageUri && contextOrPath.globalStorageUri.fsPath) {
+        // VS Code extension context
+        this.dbPath = path.join(contextOrPath.globalStorageUri.fsPath, 'arc-knowledge-graph.db');
+      } else {
+        // Fallback to a temporary path if context is invalid
+        const tempDir = require('os').tmpdir();
+        this.dbPath = path.join(tempDir, 'arc-knowledge-graph.db');
+        console.warn('Invalid context provided to SQLitePersistenceService, using temporary path:', this.dbPath);
+      }
 
-    // Ensure the directory exists
-    const dbDir = path.dirname(this.dbPath);
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
+      // Ensure the directory exists
+      const dbDir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
+
+      console.log('SQLitePersistenceService initialized with database path:', this.dbPath);
+    } catch (error) {
+      console.error('Error in SQLitePersistenceService constructor:', error);
+      // Fallback to a temporary path if there's an error
+      const tempDir = require('os').tmpdir();
+      this.dbPath = path.join(tempDir, 'arc-knowledge-graph-fallback.db');
+      console.warn('Using fallback database path due to error:', this.dbPath);
     }
   }
 
@@ -62,12 +77,36 @@ export class SQLitePersistenceService implements IPersistenceService {
           fs.mkdirSync(dbDir, { recursive: true });
         }
 
+        // Check if the database path is valid
+        if (!this.dbPath) {
+          const tempDir = require('os').tmpdir();
+          this.dbPath = path.join(tempDir, 'arc-knowledge-graph-emergency.db');
+          console.warn('Database path is invalid, using emergency path:', this.dbPath);
+        }
+
         // Try to instantiate the database with more detailed error handling
         try {
+          // Use a timeout to prevent hanging if the database is locked
+          const timeout = setTimeout(() => {
+            console.error('Database initialization timed out');
+            if (typeof require !== 'undefined') {
+              try {
+                const vscode = require('vscode');
+                vscode.window.showErrorMessage('Database initialization timed out. The database may be locked by another process.');
+              } catch (_) {}
+            }
+            reject(new Error('Database initialization timed out'));
+          }, 10000); // 10 second timeout
+
           this.db = new BetterSQLite3(this.dbPath, {
             // Adding verbose option for better diagnostics
-            verbose: console.log
+            verbose: console.log,
+            // Set a timeout for database operations
+            timeout: 5000
           }) as any;
+
+          // Clear the timeout if successful
+          clearTimeout(timeout);
         } catch (dbError) {
           console.error('Error instantiating BetterSQLite3:', dbError);
           if (typeof dbError === 'object' && dbError && 'stack' in dbError) {
@@ -1112,5 +1151,27 @@ export class SQLitePersistenceService implements IPersistenceService {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Clear any caches to free up memory
+   */
+  clearCaches(): void {
+    console.log('Clearing SQLitePersistenceService caches...');
+
+    // Clear any statement caches
+    if (this.db) {
+      try {
+        // Run PRAGMA to shrink the database
+        this.db.pragma('shrink_memory');
+
+        // Run VACUUM to optimize the database
+        this.db.exec('VACUUM');
+
+        console.log('Database caches cleared and optimized');
+      } catch (error) {
+        console.error('Error clearing database caches:', error);
+      }
+    }
   }
 }

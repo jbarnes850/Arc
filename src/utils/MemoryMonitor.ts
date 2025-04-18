@@ -9,8 +9,9 @@ import * as vscode from 'vscode';
 export class MemoryMonitor {
   private static instance: MemoryMonitor;
   private memoryUsageInterval: NodeJS.Timeout | undefined;
-  private memoryWarningThreshold: number = 180; // MB
-  private memoryLimitThreshold: number = 200; // MB
+  private memoryWarningThreshold: number = 150; // MB
+  private memoryLimitThreshold: number = 180; // MB
+  private memoryEmergencyThreshold: number = 250; // MB
   private lastWarningTime: number = 0;
   private warningCooldown: number = 60000; // 1 minute cooldown between warnings
   private isMonitoring: boolean = false;
@@ -79,9 +80,10 @@ export class MemoryMonitor {
       const memoryUsage = process.memoryUsage();
       const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
       const rssUsedMB = Math.round(memoryUsage.rss / 1024 / 1024);
+      const externalMB = Math.round(memoryUsage.external / 1024 / 1024);
 
       // Log memory usage
-      console.log(`Memory usage - Heap: ${heapUsedMB} MB, RSS: ${rssUsedMB} MB`);
+      console.log(`Memory usage - Heap: ${heapUsedMB} MB, RSS: ${rssUsedMB} MB, External: ${externalMB} MB`);
 
       // Check if memory usage is above warning threshold
       if (rssUsedMB > this.memoryWarningThreshold) {
@@ -94,17 +96,21 @@ export class MemoryMonitor {
           // Show warning
           vscode.window.showWarningMessage(
             `ARC memory usage is high (${rssUsedMB} MB). Consider restarting VS Code if performance degrades.`,
-            'Show Details'
+            'Show Details',
+            'Optimize Memory'
           ).then(selection => {
             if (selection === 'Show Details') {
               this.showMemoryStatus();
+            } else if (selection === 'Optimize Memory') {
+              this.optimizeMemory();
             }
           });
 
           // Log telemetry
           this.logTelemetry('memory_warning', {
             heapUsedMB,
-            rssUsedMB
+            rssUsedMB,
+            externalMB
           });
         }
       }
@@ -114,10 +120,37 @@ export class MemoryMonitor {
         // Run garbage collection if available
         this.runGarbageCollection();
 
+        // Perform memory optimization
+        this.optimizeMemory();
+
         // Log telemetry
         this.logTelemetry('memory_limit_exceeded', {
           heapUsedMB,
-          rssUsedMB
+          rssUsedMB,
+          externalMB
+        });
+      }
+
+      // Check if memory usage is above emergency threshold
+      if (rssUsedMB > this.memoryEmergencyThreshold) {
+        // Show emergency warning
+        vscode.window.showErrorMessage(
+          `ARC memory usage is critically high (${rssUsedMB} MB). Please save your work and restart VS Code.`,
+          'Restart VS Code'
+        ).then(selection => {
+          if (selection === 'Restart VS Code') {
+            vscode.commands.executeCommand('workbench.action.reloadWindow');
+          }
+        });
+
+        // Perform aggressive memory optimization
+        this.optimizeMemoryAggressively();
+
+        // Log telemetry
+        this.logTelemetry('memory_emergency', {
+          heapUsedMB,
+          rssUsedMB,
+          externalMB
         });
       }
 
@@ -165,6 +198,70 @@ export class MemoryMonitor {
       }
     } catch (error) {
       console.error('Error running garbage collection:', error);
+    }
+  }
+
+  /**
+   * Optimize memory usage
+   */
+  private optimizeMemory(): void {
+    try {
+      console.log('Optimizing memory usage...');
+
+      // Run garbage collection
+      this.runGarbageCollection();
+
+      // Clear any caches in global variables
+      if (global.persistenceService) {
+        // Clear any caches in the persistence service
+        if (typeof global.persistenceService.clearCaches === 'function') {
+          global.persistenceService.clearCaches();
+        }
+      }
+
+      // Show notification
+      vscode.window.showInformationMessage('Memory optimization completed');
+
+      console.log('Memory optimization completed');
+    } catch (error) {
+      console.error('Error optimizing memory:', error);
+    }
+  }
+
+  /**
+   * Aggressively optimize memory usage
+   */
+  private optimizeMemoryAggressively(): void {
+    try {
+      console.log('Aggressively optimizing memory usage...');
+
+      // Run garbage collection multiple times
+      this.runGarbageCollection();
+      setTimeout(() => this.runGarbageCollection(), 1000);
+      setTimeout(() => this.runGarbageCollection(), 2000);
+
+      // Clear any caches in global variables
+      if (global.persistenceService) {
+        // Clear any caches in the persistence service
+        if (typeof global.persistenceService.clearCaches === 'function') {
+          global.persistenceService.clearCaches();
+        }
+
+        // Close and reopen the database connection
+        if (typeof global.persistenceService.closeConnection === 'function' &&
+            typeof global.persistenceService.initializeDatabase === 'function') {
+          global.persistenceService.closeConnection()
+            .then(() => global.persistenceService.initializeDatabase())
+            .catch(error => console.error('Error reopening database connection:', error));
+        }
+      }
+
+      // Show notification
+      vscode.window.showWarningMessage('Aggressive memory optimization completed. Consider restarting VS Code.');
+
+      console.log('Aggressive memory optimization completed');
+    } catch (error) {
+      console.error('Error aggressively optimizing memory:', error);
     }
   }
 
