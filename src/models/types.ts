@@ -12,10 +12,12 @@ export interface Repository {
   repoId: string;
   path: string;
   name: string;
+  description?: string;
 }
 
 export interface Commit {
   commitHash: string;
+  repoId: string;
   message: string;
   timestamp: number;
   authorDevId: string;

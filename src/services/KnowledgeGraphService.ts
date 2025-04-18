@@ -96,19 +96,19 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     if (!commit) {
       throw new Error(`Commit ${commitHash} not found`);
     }
-    
+
     // Get changed files for this commit
     const { stdout } = await this.execGitCommand(
       `git show --name-only --pretty=format: ${commitHash}`,
       repoPath
     );
-    
+
     const changedFiles = stdout.split('\n').filter(line => line.trim() !== '');
-    
+
     // Process each changed file
     for (const filePath of changedFiles) {
       const fullPath = `${repoPath}/${filePath}`;
-      
+
       // Skip files that exceed size limit
       try {
         const stats = fs.statSync(fullPath);
@@ -117,12 +117,12 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         // if stat fails, skip
         continue;
       }
-      
+
       // Skip unparseable files
       if (!this.codeParserService.canParseFile(fullPath)) {
         continue;
       }
-      
+
       // File-cache: compute hash as string
       let fileHash: string | undefined;
       if (this.enableFileCache) {
@@ -135,15 +135,15 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
           // ignore and parse
         }
       }
-      
+
       // Get the full path to the file
       // Parse the file to get code elements
       const codeElements = await this.codeParserService.parseFile(fullPath, repoId);
-      
+
       // Save code elements to the database
       for (const element of codeElements) {
         await this.persistenceService.saveCodeElement(element);
-        
+
         // Create a version for this element at this commit
         const version: CodeElementVersion = {
           versionId: this.generateVersionId(element.elementId, commitHash),
@@ -156,10 +156,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
           endLine: undefined,
           previousVersionId: null // Will be linked later
         };
-        
+
         // Save the version
         await this.persistenceService.saveCodeElementVersion(version);
-        
+
         // Find the previous version of this element
         const previousVersions = await this.getPreviousVersions(element.elementId, commitHash);
         if (previousVersions.length > 0) {
@@ -170,7 +170,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
           );
         }
       }
-      
+
       // Save updated hash
       if (this.enableFileCache && fileHash) {
         await this.persistenceService.saveFileHash(repoId, fullPath, fileHash);
@@ -180,35 +180,135 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
   /**
    * Get previous versions of a code element before a specific commit
-   * @param _elementId Element ID
-   * @param _commitHash Commit hash
+   * @param elementId Element ID
+   * @param commitHash Commit hash
    */
-  private async getPreviousVersions(_elementId: string, _commitHash: string): Promise<CodeElementVersion[]> {
-    // In a real implementation, we would query the database for versions
-    // of this element with commit timestamps before the current commit
-    // For simplicity, we'll return an empty array
-    return [];
+  private async getPreviousVersions(elementId: string, commitHash: string): Promise<CodeElementVersion[]> {
+    // Get the commit to find its timestamp
+    const commit = await this.persistenceService.getCommit(commitHash);
+    if (!commit) {
+      return [];
+    }
+
+    // Get all versions of this element
+    const allVersions: CodeElementVersion[] = [];
+    const commits = await this.persistenceService.getCommitHistoryForElementId(elementId);
+
+    for (const c of commits) {
+      if (c.commitHash !== commitHash && c.timestamp < commit.timestamp) {
+        const version = await this.persistenceService.getCodeElementVersions(elementId, c.commitHash);
+        if (version) {
+          allVersions.push(version);
+        }
+      }
+    }
+
+    // Sort by timestamp (descending)
+    allVersions.sort((a, b) => {
+      const commitA = commits.find(c => c.commitHash === a.commitHash);
+      const commitB = commits.find(c => c.commitHash === b.commitHash);
+      if (!commitA || !commitB) {
+        return 0;
+      }
+      return commitB.timestamp - commitA.timestamp;
+    });
+
+    return allVersions;
+  }
+
+  /**
+   * Trace the history of a code element through all its versions
+   * @param elementId Element ID
+   */
+  async traceElementHistory(elementId: string): Promise<CodeElementVersion[]> {
+    // Get the latest version of the element
+    const latestVersion = await this.persistenceService.findLatestCodeElementVersion(elementId);
+    if (!latestVersion) {
+      return [];
+    }
+
+    // Start with the latest version
+    const history: CodeElementVersion[] = [latestVersion];
+    let currentVersion = latestVersion;
+
+    // Follow the previousVersionId links to trace the history
+    while (currentVersion.previousVersionId) {
+      const previousVersion = await this.persistenceService.getCodeElementVersion(currentVersion.previousVersionId);
+      if (!previousVersion) {
+        break;
+      }
+      history.push(previousVersion);
+      currentVersion = previousVersion;
+    }
+
+    return history;
+  }
+
+  /**
+   * Link a decision record to a code element version
+   * @param decisionId Decision record ID
+   * @param elementId Code element ID
+   */
+  async linkDecisionToElement(decisionId: string, elementId: string): Promise<void> {
+    // Get the latest version of the element
+    const latestVersion = await this.persistenceService.findLatestCodeElementVersion(elementId);
+    if (!latestVersion) {
+      throw new Error(`Code element ${elementId} not found`);
+    }
+
+    // Link the decision to the latest version
+    await this.persistenceService.linkDecisionToCodeVersion(decisionId, latestVersion.versionId);
+  }
+
+  /**
+   * Get all code elements modified by a specific commit
+   * @param commitHash Commit hash
+   */
+  async getElementsModifiedByCommit(commitHash: string): Promise<CodeElement[]> {
+    // Get the commit to verify it exists
+    const commit = await this.persistenceService.getCommit(commitHash);
+    if (!commit) {
+      throw new Error(`Commit ${commitHash} not found`);
+    }
+
+    // Get all code element versions for this commit
+    const elements: CodeElement[] = [];
+    const allElements = await this.persistenceService.getAllCodeElements(commit.repoId);
+
+    for (const element of allElements) {
+      const version = await this.persistenceService.getCodeElementVersions(element.elementId, commitHash);
+      if (version) {
+        elements.push(element);
+      }
+    }
+
+    return elements;
   }
 
   /**
    * Get all code elements for a repository
-   * @param _repoId Repository ID
+   * @param repoId Repository ID
    */
-  private async getCodeElementsForRepo(_repoId: string): Promise<CodeElement[]> {
-    // In a real implementation, we would query the database for all code elements
-    // in the repository. For simplicity, we'll return an empty array.
-    return [];
+  private async getCodeElementsForRepo(repoId: string): Promise<CodeElement[]> {
+    return this.persistenceService.getAllCodeElements(repoId);
   }
 
   /**
    * Execute a Git command
-   * @param _command Git command to execute
-   * @param _cwd Working directory
+   * @param command Git command to execute
+   * @param cwd Working directory
    */
-  private async execGitCommand(_command: string, _cwd: string): Promise<{stdout: string, stderr: string}> {
-    // In a real implementation, we would use child_process.exec
-    // For simplicity, we'll return empty strings
-    return { stdout: '', stderr: '' };
+  private async execGitCommand(command: string, cwd: string): Promise<{stdout: string, stderr: string}> {
+    return new Promise((resolve, reject) => {
+      const { exec } = require('child_process');
+      exec(command, { cwd }, (error: Error | null, stdout: string, stderr: string) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    });
   }
 
   /**
@@ -248,24 +348,24 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   private getLabelFromIdentifier(identifier: string): string {
     // Create a human-readable label from the identifier
     const parts = identifier.split(':');
-    
+
     if (parts.length === 1) {
       // Just a file path
       return parts[0];
     }
-    
+
     if (parts.length >= 3 && parts[1] === 'class') {
       return parts[2]; // Class name
     }
-    
+
     if (parts.length >= 3 && parts[1] === 'function') {
       return parts[2]; // Function name
     }
-    
+
     if (parts.length >= 5 && parts[1] === 'class' && parts[3] === 'method') {
       return `${parts[2]}.${parts[4]}`; // Class.method
     }
-    
+
     return identifier;
   }
 }

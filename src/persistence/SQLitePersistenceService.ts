@@ -3,16 +3,16 @@ import * as fs from 'fs';
 
 import BetterSQLite3 from 'better-sqlite3';
 
-import { 
-  IPersistenceService 
+import {
+  IPersistenceService
 } from './IPersistenceService';
-import { 
-  Developer, 
-  Repository, 
-  Commit, 
-  CodeElement, 
-  CodeElementVersion, 
-  DecisionRecord 
+import {
+  Developer,
+  Repository,
+  Commit,
+  CodeElement,
+  CodeElementVersion,
+  DecisionRecord
 } from '../models/types';
 
 // Define SQLite error type to avoid 'any' type errors
@@ -32,7 +32,7 @@ export class SQLitePersistenceService implements IPersistenceService {
   constructor(context: any) {
     // Store the database in the extension's global storage path
     this.dbPath = path.join(context.globalStorageUri.fsPath, 'arc-knowledge-graph.db');
-    
+
     // Ensure the directory exists
     const dbDir = path.dirname(this.dbPath);
     if (!fs.existsSync(dbDir)) {
@@ -48,14 +48,14 @@ export class SQLitePersistenceService implements IPersistenceService {
       try {
         // Instantiate DB
         console.log(`Initializing database at path: ${this.dbPath}`);
-        
+
         // Ensure the directory exists again (just to be safe)
         const dbDir = path.dirname(this.dbPath);
         if (!fs.existsSync(dbDir)) {
           console.log(`Creating database directory: ${dbDir}`);
           fs.mkdirSync(dbDir, { recursive: true });
         }
-        
+
         // Try to instantiate the database with more detailed error handling
         try {
           this.db = new BetterSQLite3(this.dbPath, {
@@ -80,7 +80,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           }
           throw new Error(`Failed to create SQLite database: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
         }
-        
+
         // Set pragmas with error handling
         try {
           this.db.pragma('journal_mode = WAL');
@@ -103,13 +103,14 @@ export class SQLitePersistenceService implements IPersistenceService {
           }
           throw new Error(`Failed to set SQLite pragmas: ${pragmaError instanceof Error ? pragmaError.message : String(pragmaError)}`);
         }
-        
+
         const schema = `
           -- Repositories table
           CREATE TABLE IF NOT EXISTS repositories (
             repo_id TEXT PRIMARY KEY,
             path TEXT NOT NULL,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            description TEXT
           );
 
           -- Developers table
@@ -118,27 +119,46 @@ export class SQLitePersistenceService implements IPersistenceService {
             name TEXT,
             email TEXT NOT NULL UNIQUE
           );
+          CREATE INDEX IF NOT EXISTS idx_developers_email ON developers(email);
 
           -- Commits table
           CREATE TABLE IF NOT EXISTS commits (
             commit_hash TEXT PRIMARY KEY,
+            repo_id TEXT NOT NULL,
             message TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
+            commit_timestamp INTEGER NOT NULL,
             author_dev_id TEXT NOT NULL,
             committer_dev_id TEXT NOT NULL,
+            FOREIGN KEY (repo_id) REFERENCES repositories(repo_id),
             FOREIGN KEY (author_dev_id) REFERENCES developers (dev_id),
             FOREIGN KEY (committer_dev_id) REFERENCES developers (dev_id)
           );
+          CREATE INDEX IF NOT EXISTS idx_commits_repo_id ON commits(repo_id);
+          CREATE INDEX IF NOT EXISTS idx_commits_timestamp ON commits(commit_timestamp);
+          CREATE INDEX IF NOT EXISTS idx_commits_author ON commits(author_dev_id);
+
+          -- Commit parents table
+          CREATE TABLE IF NOT EXISTS commit_parents (
+            commit_hash TEXT NOT NULL,
+            parent_hash TEXT NOT NULL,
+            PRIMARY KEY (commit_hash, parent_hash),
+            FOREIGN KEY (commit_hash) REFERENCES commits(commit_hash),
+            FOREIGN KEY (parent_hash) REFERENCES commits(commit_hash)
+          );
+          CREATE INDEX IF NOT EXISTS idx_commit_parents_commit ON commit_parents(commit_hash);
+          CREATE INDEX IF NOT EXISTS idx_commit_parents_parent ON commit_parents(parent_hash);
 
           -- Code elements table
           CREATE TABLE IF NOT EXISTS code_elements (
             element_id TEXT PRIMARY KEY,
             repo_id TEXT NOT NULL,
-            type TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('file', 'class', 'function')),
             stable_identifier TEXT NOT NULL,
             FOREIGN KEY (repo_id) REFERENCES repositories (repo_id),
             UNIQUE (repo_id, stable_identifier)
           );
+          CREATE INDEX IF NOT EXISTS idx_code_elements_repo ON code_elements(repo_id);
+          CREATE INDEX IF NOT EXISTS idx_code_elements_stable_id ON code_elements(stable_identifier);
 
           -- Code element versions table
           CREATE TABLE IF NOT EXISTS code_element_versions (
@@ -153,6 +173,9 @@ export class SQLitePersistenceService implements IPersistenceService {
             FOREIGN KEY (commit_hash) REFERENCES commits (commit_hash),
             FOREIGN KEY (previous_version_id) REFERENCES code_element_versions (version_id)
           );
+          CREATE INDEX IF NOT EXISTS idx_code_element_versions_element ON code_element_versions(element_id);
+          CREATE INDEX IF NOT EXISTS idx_code_element_versions_commit ON code_element_versions(commit_hash);
+          CREATE INDEX IF NOT EXISTS idx_code_element_versions_previous ON code_element_versions(previous_version_id);
 
           -- Decision records table
           CREATE TABLE IF NOT EXISTS decision_records (
@@ -165,6 +188,7 @@ export class SQLitePersistenceService implements IPersistenceService {
             FOREIGN KEY (repo_id) REFERENCES repositories (repo_id),
             FOREIGN KEY (author_dev_id) REFERENCES developers (dev_id)
           );
+          CREATE INDEX IF NOT EXISTS idx_decision_records_repo ON decision_records(repo_id);
 
           -- Decision references code table (for REFERENCES relationship)
           CREATE TABLE IF NOT EXISTS decision_references_code (
@@ -174,6 +198,8 @@ export class SQLitePersistenceService implements IPersistenceService {
             FOREIGN KEY (decision_id) REFERENCES decision_records (decision_id),
             FOREIGN KEY (version_id) REFERENCES code_element_versions (version_id)
           );
+          CREATE INDEX IF NOT EXISTS idx_decision_references_decision ON decision_references_code(decision_id);
+          CREATE INDEX IF NOT EXISTS idx_decision_references_version ON decision_references_code(version_id);
 
           -- File hashes table
           CREATE TABLE IF NOT EXISTS file_hashes (
@@ -184,14 +210,8 @@ export class SQLitePersistenceService implements IPersistenceService {
             FOREIGN KEY (repo_id) REFERENCES repositories(repo_id)
           );
           CREATE INDEX IF NOT EXISTS idx_file_hashes_repo_id ON file_hashes(repo_id);
-
-          -- Create indexes for better query performance
-          CREATE INDEX IF NOT EXISTS idx_code_elements_repo_id ON code_elements (repo_id);
-          CREATE INDEX IF NOT EXISTS idx_code_element_versions_element_id ON code_element_versions (element_id);
-          CREATE INDEX IF NOT EXISTS idx_code_element_versions_commit_hash ON code_element_versions (commit_hash);
-          CREATE INDEX IF NOT EXISTS idx_decision_records_repo_id ON decision_records (repo_id);
         `;
-        
+
         try {
           // Execute schema creation in a transaction
           const batch = this.db.transaction(() => this.db.exec(schema));
@@ -358,14 +378,15 @@ export class SQLitePersistenceService implements IPersistenceService {
       }
 
       const sql = `
-        INSERT OR REPLACE INTO commits (commit_hash, message, timestamp, author_dev_id, committer_dev_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO commits (commit_hash, repo_id, message, commit_timestamp, author_dev_id, committer_dev_id)
+        VALUES (?, ?, ?, ?, ?, ?)
       `;
 
       this.db.run(
         sql,
         [
           commit.commitHash,
+          commit.repoId,
           commit.message,
           commit.timestamp,
           commit.authorDevId,
@@ -406,8 +427,9 @@ export class SQLitePersistenceService implements IPersistenceService {
 
         resolve({
           commitHash: row.commit_hash,
+          repoId: row.repo_id,
           message: row.message,
-          timestamp: row.timestamp,
+          timestamp: row.commit_timestamp,
           authorDevId: row.author_dev_id,
           committerDevId: row.committer_dev_id
         });
@@ -487,7 +509,7 @@ export class SQLitePersistenceService implements IPersistenceService {
       }
 
       const sql = `
-        SELECT * FROM code_elements 
+        SELECT * FROM code_elements
         WHERE repo_id = ? AND stable_identifier = ?
       `;
 
@@ -541,7 +563,7 @@ export class SQLitePersistenceService implements IPersistenceService {
       }
 
       const sql = `
-        INSERT OR REPLACE INTO code_element_versions 
+        INSERT OR REPLACE INTO code_element_versions
         (version_id, element_id, commit_hash, name, start_line, end_line, previous_version_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `;
@@ -614,7 +636,7 @@ export class SQLitePersistenceService implements IPersistenceService {
         SELECT v.* FROM code_element_versions v
         JOIN commits c ON v.commit_hash = c.commit_hash
         WHERE v.element_id = ?
-        ORDER BY c.timestamp DESC
+        ORDER BY c.commit_timestamp DESC
         LIMIT 1
       `;
 
@@ -650,12 +672,12 @@ export class SQLitePersistenceService implements IPersistenceService {
       }
 
       const limitClause = limit ? `LIMIT ${limit}` : '';
-      
+
       const sql = `
         SELECT c.* FROM commits c
         JOIN code_element_versions v ON c.commit_hash = v.commit_hash
         WHERE v.element_id = ?
-        ORDER BY c.timestamp DESC
+        ORDER BY c.commit_timestamp DESC
         ${limitClause}
       `;
 
@@ -664,16 +686,53 @@ export class SQLitePersistenceService implements IPersistenceService {
           reject(err);
           return;
         }
-        
+
         const commits = rows.map(row => ({
           commitHash: row.commit_hash,
+          repoId: row.repo_id,
           message: row.message,
-          timestamp: row.timestamp,
+          timestamp: row.commit_timestamp,
           authorDevId: row.author_dev_id,
           committerDevId: row.committer_dev_id
         }));
-        
+
         resolve(commits);
+      });
+    });
+  }
+
+  async getCodeElementVersions(elementId: string, commitHash: string): Promise<CodeElementVersion | null> {
+    return new Promise<CodeElementVersion | null>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        SELECT * FROM code_element_versions
+        WHERE element_id = ? AND commit_hash = ?
+      `;
+
+      this.db.get(sql, [elementId, commitHash], (err: SQLiteError, row: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        if (!row) {
+          resolve(null);
+          return;
+        }
+
+        resolve({
+          versionId: row.version_id,
+          elementId: row.element_id,
+          commitHash: row.commit_hash,
+          name: row.name,
+          startLine: row.start_line,
+          endLine: row.end_line,
+          previousVersionId: row.previous_version_id
+        });
       });
     });
   }
@@ -687,7 +746,7 @@ export class SQLitePersistenceService implements IPersistenceService {
       }
 
       const sql = `
-        INSERT OR REPLACE INTO decision_records 
+        INSERT OR REPLACE INTO decision_records
         (decision_id, repo_id, title, content, created_at, author_dev_id)
         VALUES (?, ?, ?, ?, ?, ?)
       `;
@@ -765,7 +824,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           reject(err);
           return;
         }
-        
+
         const decisions = rows.map(row => ({
           decisionId: row.decision_id,
           repoId: row.repo_id,
@@ -774,7 +833,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           createdAt: row.created_at,
           authorDevId: row.author_dev_id
         }));
-        
+
         resolve(decisions);
       });
     });
@@ -910,6 +969,75 @@ export class SQLitePersistenceService implements IPersistenceService {
           resolve(row ? row.count : 0);
         }
       );
+    });
+  }
+
+  // Commit parent operations
+  async saveCommitParent(commitHash: string, parentHash: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        INSERT OR REPLACE INTO commit_parents (commit_hash, parent_hash)
+        VALUES (?, ?)
+      `;
+
+      this.db.run(sql, [commitHash, parentHash], (err: SQLiteError) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  async getCommitParents(commitHash: string): Promise<string[]> {
+    return new Promise<string[]>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        SELECT parent_hash FROM commit_parents WHERE commit_hash = ?
+      `;
+
+      this.db.all(sql, [commitHash], (err: SQLiteError, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const parentHashes = rows.map(row => row.parent_hash);
+        resolve(parentHashes);
+      });
+    });
+  }
+
+  async getCommitChildren(parentHash: string): Promise<string[]> {
+    return new Promise<string[]>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        SELECT commit_hash FROM commit_parents WHERE parent_hash = ?
+      `;
+
+      this.db.all(sql, [parentHash], (err: SQLiteError, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const childHashes = rows.map(row => row.commit_hash);
+        resolve(childHashes);
+      });
     });
   }
 

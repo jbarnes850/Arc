@@ -7,7 +7,7 @@ import { IPersistenceService } from '../persistence/IPersistenceService';
 suite('GitHubIntegrationService Test Suite', () => {
   let integrationService: GitHubIntegrationService;
   const testRepoPath = path.join(__dirname, '..', '..', 'test', 'testRepo');
-  
+
   setup(() => {
     // Create a minimal mock persistence service with just the methods needed for testing
     const mockPersistenceService: IPersistenceService = {
@@ -17,6 +17,10 @@ suite('GitHubIntegrationService Test Suite', () => {
       getDeveloperByEmail: async () => null,
       saveCommit: async () => {},
       getCommit: async () => null,
+      // Commit parent operations
+      saveCommitParent: async () => {},
+      getCommitParents: async () => [],
+      getCommitChildren: async () => [],
       saveCodeElement: async () => {},
       getCodeElement: async () => null,
       getCodeElementByIdentifier: async () => null,
@@ -25,6 +29,7 @@ suite('GitHubIntegrationService Test Suite', () => {
       getCodeElementVersion: async () => null,
       findLatestCodeElementVersion: async () => null,
       getCommitHistoryForElementId: async () => [],
+      getCodeElementVersions: async () => null,
       saveDecisionRecord: async () => {},
       getDecisionRecord: async () => null,
       findDecisionRecordsLinkedToVersion: async () => [],
@@ -38,22 +43,22 @@ suite('GitHubIntegrationService Test Suite', () => {
       getCommitCount: async () => 0,
       getDecisionCount: async () => 0
     };
-    
+
     // Initialize the integration service with our minimal mock
     integrationService = new GitHubIntegrationService(mockPersistenceService);
   });
-  
+
   test('Should index commit history', async function() {
     // This test may take longer
     this.timeout(10000);
-    
+
     // Generate a test repo ID
     const repoId = 'test-repo-' + Date.now();
-    
+
     try {
       // Index the commit history
       await integrationService.indexCommitHistory(testRepoPath, repoId);
-      
+
       // Success if no exception is thrown
       assert.ok(true, 'Should index commit history without errors');
     } catch (error) {
@@ -62,21 +67,21 @@ suite('GitHubIntegrationService Test Suite', () => {
       assert.ok(error, 'Expected error for non-git repository');
     }
   });
-  
+
   test('Should get commits for file', async function() {
     // This test may take longer
     this.timeout(10000);
-    
+
     try {
       // Get commits for a specific file
       const commits = await integrationService.getCommitsForFile(
-        testRepoPath, 
+        testRepoPath,
         'src/ts/calculator.ts'
       );
-      
+
       // Verify that we got an array of commits
       assert.ok(Array.isArray(commits), 'Should return an array of commits');
-      
+
       // If the file has commits, verify their structure
       if (commits.length > 0) {
         const commit = commits[0];
@@ -90,11 +95,11 @@ suite('GitHubIntegrationService Test Suite', () => {
       assert.ok(error, 'Expected error for non-git repository or non-existent file');
     }
   });
-  
+
   test('Should handle non-existent repository gracefully', async () => {
     // Test with non-existent repository path
     const nonExistentPath = path.join(__dirname, 'non-existent-repo');
-    
+
     try {
       // Should throw an error
       await integrationService.indexCommitHistory(nonExistentPath, 'test-repo');

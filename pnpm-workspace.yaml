@@ -2,3 +2,6 @@ ignoredBuiltDependencies:
   - better-sqlite3
   - esbuild
   - sqlite3
+  - tree-sitter-javascript
+  - tree-sitter-python
+  - tree-sitter-typescript

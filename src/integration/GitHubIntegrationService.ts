@@ -1,6 +1,7 @@
 import * as cp from 'child_process';
 import * as util from 'util';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import { IGitHubIntegrationService } from './IGitHubIntegrationService';
 import { IPersistenceService } from '../persistence/IPersistenceService';
 import { Commit, Developer } from '../models/types';
@@ -27,30 +28,30 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
       );
 
       const commits = stdout.split('\n').filter(line => line.trim() !== '');
-      
+
       // Process each commit
       for (const commitLine of commits) {
         const [
-          hash, 
-          authorName, 
-          authorEmail, 
-          committerName, 
-          committerEmail, 
-          timestamp, 
+          hash,
+          authorName,
+          authorEmail,
+          committerName,
+          committerEmail,
+          timestamp,
           message
         ] = commitLine.split('|');
-        
+
         // Create or get developers
         const authorDevId = this.generateDevId(authorEmail);
         const committerDevId = this.generateDevId(committerEmail);
-        
+
         // Save developers
         await this.persistenceService.saveDeveloper({
           devId: authorDevId,
           name: authorName,
           email: authorEmail
         });
-        
+
         if (authorEmail !== committerEmail) {
           await this.persistenceService.saveDeveloper({
             devId: committerDevId,
@@ -58,22 +59,23 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
             email: committerEmail
           });
         }
-        
+
         // Save commit
         const commit: Commit = {
           commitHash: hash,
+          repoId,
           message,
           timestamp: parseInt(timestamp, 10) * 1000, // Convert to milliseconds
           authorDevId,
           committerDevId
         };
-        
+
         await this.persistenceService.saveCommit(commit);
-        
+
         // Get changed files for this commit
         await this.processChangedFiles(repoPath, repoId, hash);
       }
-      
+
       console.log(`Indexed ${commits.length} commits from repository`);
     } catch (error) {
       console.error(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
@@ -94,13 +96,13 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
         `git show --name-only --pretty=format: ${commitHash}`,
         { cwd: repoPath }
       );
-      
+
       const changedFiles = stdout.split('\n').filter(line => line.trim() !== '');
-      
+
       // Store the information about changed files
       // This will be used by the code parser to create CodeElement and CodeElementVersion entities
       // We're not implementing the full parsing logic here as that will be handled by the CodeParserService
-      
+
       return;
     } catch (error) {
       console.error(`Error processing changed files for commit ${commitHash}:`, error);
@@ -120,33 +122,34 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
         `git log ${limitArg} --pretty=format:"%H|%an|%ae|%cn|%ce|%ct|%s" -- "${filePath}"`,
         { cwd: repoPath }
       );
-      
+
       const commits: Commit[] = [];
       const commitLines = stdout.split('\n').filter(line => line.trim() !== '');
-      
+
       for (const commitLine of commitLines) {
         const [
-          hash, 
-          authorName, 
-          authorEmail, 
-          committerName, 
-          committerEmail, 
-          timestamp, 
+          hash,
+          authorName,
+          authorEmail,
+          committerName,
+          committerEmail,
+          timestamp,
           message
         ] = commitLine.split('|');
-        
+
         const authorDevId = this.generateDevId(authorEmail);
         const committerDevId = this.generateDevId(committerEmail);
-        
+
         commits.push({
           commitHash: hash,
+          repoId: this.extractRepoIdFromPath(repoPath),
           message,
           timestamp: parseInt(timestamp, 10) * 1000, // Convert to milliseconds
           authorDevId,
           committerDevId
         });
       }
-      
+
       return commits;
     } catch (error) {
       console.error(`Error getting commits for file ${filePath}:`, error);
@@ -165,27 +168,28 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
         `git show --pretty=format:"%H|%an|%ae|%cn|%ce|%ct|%s" --no-patch ${commitHash}`,
         { cwd: repoPath }
       );
-      
+
       const commitLine = stdout.trim();
       if (!commitLine) {
         return null;
       }
-      
+
       const [
-        hash, 
-        authorName, 
-        authorEmail, 
-        committerName, 
-        committerEmail, 
-        timestamp, 
+        hash,
+        authorName,
+        authorEmail,
+        committerName,
+        committerEmail,
+        timestamp,
         message
       ] = commitLine.split('|');
-      
+
       const authorDevId = this.generateDevId(authorEmail);
       const committerDevId = this.generateDevId(committerEmail);
-      
+
       return {
         commitHash: hash,
+        repoId: this.extractRepoIdFromPath(repoPath),
         message,
         timestamp: parseInt(timestamp, 10) * 1000, // Convert to milliseconds
         authorDevId,
@@ -211,5 +215,16 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
    */
   private generateDevId(email: string): string {
     return crypto.createHash('sha256').update(email).digest('hex').substring(0, 16);
+  }
+
+  /**
+   * Extract a repository ID from a repository path
+   * @param repoPath Path to the repository
+   */
+  private extractRepoIdFromPath(repoPath: string): string {
+    // Extract the repository name from the path
+    const repoName = path.basename(repoPath);
+    // Generate a deterministic ID from the repository name
+    return crypto.createHash('sha256').update(repoName).digest('hex').substring(0, 16);
   }
 }

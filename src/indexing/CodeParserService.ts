@@ -29,20 +29,54 @@ export class CodeParserService implements ICodeParserService {
       // Initialize tree-sitter
       await Parser.init();
       this.parser = new Parser();
-      
+
       // Load the language grammar
-      const wasmPath = path.join(
+      // First try the direct path in node_modules
+      let wasmPath = path.join(
         extensionPath,
         'node_modules',
-        'web-tree-sitter',
+        `tree-sitter-${language}`,
         `tree-sitter-${language}.wasm`
       );
-      
+
+      // If not found, try the pnpm path structure
+      if (!fs.existsSync(wasmPath)) {
+        wasmPath = path.join(
+          extensionPath,
+          'node_modules',
+          '.pnpm',
+          `tree-sitter-${language}@*`,
+          'node_modules',
+          `tree-sitter-${language}`,
+          `tree-sitter-${language}.wasm`
+        );
+
+        // Use glob to find the exact path if the version wildcard doesn't work
+        if (!fs.existsSync(wasmPath)) {
+          const glob = require('glob');
+          const files = glob.sync(path.join(
+            extensionPath,
+            'node_modules',
+            '.pnpm',
+            `tree-sitter-${language}@*`,
+            'node_modules',
+            `tree-sitter-${language}`,
+            `tree-sitter-${language}.wasm`
+          ));
+
+          if (files.length > 0) {
+            wasmPath = files[0];
+          }
+        }
+      }
+
       // Check if the WASM file exists
       if (!fs.existsSync(wasmPath)) {
-        throw new Error(`Language grammar not found: ${wasmPath}`);
+        throw new Error(`Language grammar not found: ${wasmPath}. Searched in multiple locations.`);
       }
-      
+
+      console.log(`Found language grammar at: ${wasmPath}`);
+
       // Load the language
       this.language = await Parser.Language.load(wasmPath);
       if (this.parser && this.language) {
@@ -73,18 +107,18 @@ export class CodeParserService implements ICodeParserService {
     if (!this.parser || !this.language) {
       throw new Error('Parser not initialized');
     }
-    
+
     try {
       // Read the file content
       const content = fs.readFileSync(filePath, 'utf-8');
-      
+
       // Parse the file
       const tree = this.parser.parse(content);
       const rootNode = tree.rootNode;
-      
+
       // Extract code elements
       const codeElements: CodeElement[] = [];
-      
+
       // Add the file itself as a code element
       const fileElement: CodeElement = {
         elementId: this.generateElementId(repoId, filePath, 'file'),
@@ -93,10 +127,10 @@ export class CodeParserService implements ICodeParserService {
         stableIdentifier: this.getRelativePath(filePath)
       };
       codeElements.push(fileElement);
-      
+
       // Extract classes and functions
       this.extractCodeElements(rootNode, filePath, repoId, codeElements);
-      
+
       return codeElements;
     } catch (error) {
       console.error(`Error parsing file ${filePath}:`, error);
@@ -120,7 +154,7 @@ export class CodeParserService implements ICodeParserService {
     // Extract classes and functions based on the language
     const ext = path.extname(filePath).toLowerCase();
     const language = this.supportedExtensions[ext];
-    
+
     if (language === 'typescript') {
       this.extractTypeScriptElements(node, filePath, repoId, codeElements);
     } else if (language === 'python') {
@@ -147,7 +181,7 @@ export class CodeParserService implements ICodeParserService {
       if (nameNode) {
         const className = nameNode.text;
         const stableIdentifier = `${this.getRelativePath(filePath)}:class:${className}`;
-        
+
         codeElements.push({
           elementId: this.generateElementId(repoId, stableIdentifier, 'class'),
           repoId,
@@ -163,14 +197,14 @@ export class CodeParserService implements ICodeParserService {
       if (nameNode) {
         const functionName = nameNode.text;
         let stableIdentifier = '';
-        
+
         if (node.type === 'method_definition') {
           // Find the parent class
           let parent = node.parent;
           while (parent && parent.type !== 'class_declaration') {
             parent = parent.parent;
           }
-          
+
           if (parent && parent.childForFieldName('name')) {
             const className = parent.childForFieldName('name')!.text;
             stableIdentifier = `${this.getRelativePath(filePath)}:class:${className}:method:${functionName}`;
@@ -180,7 +214,7 @@ export class CodeParserService implements ICodeParserService {
         } else {
           stableIdentifier = `${this.getRelativePath(filePath)}:function:${functionName}`;
         }
-        
+
         codeElements.push({
           elementId: this.generateElementId(repoId, stableIdentifier, 'function'),
           repoId,
@@ -189,7 +223,7 @@ export class CodeParserService implements ICodeParserService {
         });
       }
     }
-    
+
     // Process child nodes
     for (let i = 0; i < node.childCount; i++) {
       this.extractTypeScriptElements(node.child(i)!, filePath, repoId, codeElements);
@@ -215,7 +249,7 @@ export class CodeParserService implements ICodeParserService {
       if (nameNode) {
         const className = nameNode.text;
         const stableIdentifier = `${this.getRelativePath(filePath)}:class:${className}`;
-        
+
         codeElements.push({
           elementId: this.generateElementId(repoId, stableIdentifier, 'class'),
           repoId,
@@ -228,11 +262,11 @@ export class CodeParserService implements ICodeParserService {
       if (nameNode) {
         const functionName = nameNode.text;
         let stableIdentifier = '';
-        
+
         // Check if this is a method in a class
         let parent = node.parent;
         let isMethod = false;
-        
+
         while (parent) {
           if (parent.type === 'class_definition') {
             isMethod = true;
@@ -242,11 +276,11 @@ export class CodeParserService implements ICodeParserService {
           }
           parent = parent.parent;
         }
-        
+
         if (!isMethod) {
           stableIdentifier = `${this.getRelativePath(filePath)}:function:${functionName}`;
         }
-        
+
         codeElements.push({
           elementId: this.generateElementId(repoId, stableIdentifier, 'function'),
           repoId,
@@ -255,7 +289,7 @@ export class CodeParserService implements ICodeParserService {
         });
       }
     }
-    
+
     // Process child nodes
     for (let i = 0; i < node.childCount; i++) {
       this.extractPythonElements(node.child(i)!, filePath, repoId, codeElements);
