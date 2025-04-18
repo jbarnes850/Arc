@@ -20,6 +20,7 @@ suite('GitHubIntegrationService Test Suite', () => {
       saveCodeElement: async () => {},
       getCodeElement: async () => null,
       getCodeElementByIdentifier: async () => null,
+      getAllCodeElements: async () => [],
       saveCodeElementVersion: async () => {},
       getCodeElementVersion: async () => null,
       findLatestCodeElementVersion: async () => null,
@@ -29,6 +30,8 @@ suite('GitHubIntegrationService Test Suite', () => {
       findDecisionRecordsLinkedToVersion: async () => [],
       linkDecisionToCodeVersion: async () => {},
       linkVersionToPreviousVersion: async () => {},
+      saveFileHash: async () => {},
+      getFileHash: async () => null,
       initializeDatabase: async () => {},
       // Add count methods
       getCodeElementCount: async () => 0,

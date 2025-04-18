@@ -220,16 +220,114 @@ export class ContextPanel extends BaseWebviewPanel {
    */
   private getCommitsHtml(commits: Commit[]): string {
     if (commits.length === 0) {
-      return '<p>No commit history available.</p>';
+      return '<p class="empty-state">No commit history available.</p>';
     }
+
+    /**
+     * Get initials from author name for avatar
+     * @param name Author name
+     */
+    const getInitials = (name: string): string => {
+      if (!name) {
+        return '?';
+      }
+      const parts = name.trim().split(' ');
+      if (parts.length === 1) {
+        return parts[0].charAt(0).toUpperCase();
+      }
+      return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    };
+
+    /**
+     * Format timestamp as relative time
+     * @param timestamp Timestamp to format
+     */
+    const formatRelativeTime = (timestamp: number): string => {
+      const now = Date.now();
+      const diff = now - timestamp;
+      
+      // Less than a minute
+      if (diff < 60 * 1000) {
+        return 'just now';
+      }
+      
+      // Less than an hour
+      if (diff < 60 * 60 * 1000) {
+        const minutes = Math.floor(diff / (60 * 1000));
+        return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+      }
+      
+      // Less than a day
+      if (diff < 24 * 60 * 60 * 1000) {
+        const hours = Math.floor(diff / (60 * 60 * 1000));
+        return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+      }
+      
+      // Less than a week
+      if (diff < 7 * 24 * 60 * 60 * 1000) {
+        const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+        return `${days} day${days !== 1 ? 's' : ''} ago`;
+      }
+      
+      // Default to date
+      return new Date(timestamp).toLocaleDateString();
+    };
+
+    /**
+     * Determine commit type based on message
+     * @param message Commit message
+     */
+    const getCommitType = (message: string): { type: string, label: string } => {
+      const lowerMessage = message.toLowerCase();
+      
+      if (lowerMessage.includes('add') || lowerMessage.includes('new') || lowerMessage.includes('create')) {
+        return { type: 'added', label: 'Added' };
+      }
+      
+      if (lowerMessage.includes('delet') || lowerMessage.includes('remov')) {
+        return { type: 'deleted', label: 'Deleted' };
+      }
+      
+      return { type: 'modified', label: 'Modified' };
+    };
+
+    // For simplicity in this version, we'll use dev IDs as initials
+    // In a future version, we can fetch actual developer names asynchronously
+    const getDevInitials = (devId: string): string => {
+      // Create a simple hash of the dev ID to get a consistent color
+      let hash = 0;
+      for (let i = 0; i < devId.length; i++) {
+        hash = devId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      
+      // Get first two characters or generate from hash
+      if (devId.length >= 2) {
+        return devId.substring(0, 2).toUpperCase();
+      } else {
+        // Generate letters from the hash
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const first = letters[Math.abs(hash) % 26];
+        const second = letters[Math.abs(hash >> 5) % 26];
+        return first + second;
+      }
+    };
 
     return `
       <div class="commits-list">
         ${commits.map(commit => `
           <div class="commit-item">
+            <div class="commit-avatar" title="Author: ${this.escapeHtml(commit.authorDevId)}">
+              ${getDevInitials(commit.authorDevId)}
+            </div>
             <div class="commit-hash">${commit.commitHash.substring(0, 7)}</div>
+            <div class="commit-type ${getCommitType(commit.message).type}">${getCommitType(commit.message).label}</div>
             <div class="commit-message">${this.escapeHtml(commit.message)}</div>
-            <div class="commit-date">${new Date(commit.timestamp).toLocaleString()}</div>
+            <div class="commit-date">
+              <span title="${new Date(commit.timestamp).toLocaleString()}">
+                ${formatRelativeTime(commit.timestamp)}
+              </span>
+              by ${this.escapeHtml(commit.authorDevId.split('-')[0])}
+            </div>
           </div>
         `).join('')}
       </div>

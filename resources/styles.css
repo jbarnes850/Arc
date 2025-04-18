@@ -42,20 +42,91 @@ h2 {
 }
 
 .commit-item {
-  padding: 8px;
-  margin-bottom: 8px;
+  position: relative;
+  padding: 12px 12px 12px 48px;
+  margin-bottom: 16px;
   background-color: var(--vscode-editor-inactiveSelectionBackground);
-  border-radius: 3px;
+  border-radius: 4px;
+  border-left: 3px solid var(--vscode-activityBarBadge-background);
+}
+
+/* Timeline visualization */
+.commit-item::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background-color: var(--vscode-activityBarBadge-background);
+  opacity: 0.5;
+}
+
+.commit-item:last-child::before {
+  height: 50%;
+}
+
+.commit-item:first-child::before {
+  top: 50%;
+  height: 50%;
+}
+
+.commit-item:only-child::before {
+  display: none;
+}
+
+.commit-avatar {
+  position: absolute;
+  left: 16px;
+  top: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--vscode-activityBarBadge-background);
+  color: var(--vscode-activityBarBadge-foreground);
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
 }
 
 .commit-hash {
   font-family: monospace;
   color: var(--vscode-textLink-foreground);
   margin-bottom: 4px;
+  display: inline-block;
+}
+
+.commit-type {
+  display: inline-block;
+  font-size: 0.8em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.commit-type.added {
+  background-color: var(--vscode-gitDecoration-addedResourceForeground);
+  color: var(--vscode-editor-background);
+}
+
+.commit-type.modified {
+  background-color: var(--vscode-gitDecoration-modifiedResourceForeground);
+  color: var(--vscode-editor-background);
+}
+
+.commit-type.deleted {
+  background-color: var(--vscode-gitDecoration-deletedResourceForeground);
+  color: var(--vscode-editor-background);
 }
 
 .commit-message {
   margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .commit-date {

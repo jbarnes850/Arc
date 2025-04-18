@@ -18,6 +18,7 @@ class MockPersistenceService implements IPersistenceService {
   private codeElementVersions: Map<string, any> = new Map();
   private decisionRecords: Map<string, any> = new Map();
   private relationships: Array<{type: string, fromId: string, toId: string}> = [];
+  private fileHashes: Map<string, string> = new Map(); // For file hash caching
 
   async initializeDatabase(): Promise<void> {
     // No-op for mock
@@ -108,16 +109,16 @@ class MockPersistenceService implements IPersistenceService {
   }
 
   async findDecisionRecordsLinkedToVersion(versionId: string): Promise<any[]> {
-    const result: any[] = [];
+    const decisions: any[] = [];
     for (const rel of this.relationships) {
       if (rel.type === 'REFERENCES' && rel.toId === versionId) {
         const decision = this.decisionRecords.get(rel.fromId);
         if (decision) {
-          result.push(decision);
+          decisions.push(decision);
         }
       }
     }
-    return result;
+    return decisions;
   }
 
   async linkDecisionToCodeVersion(decisionId: string, versionId: string): Promise<void> {
@@ -166,6 +167,27 @@ class MockPersistenceService implements IPersistenceService {
       }
     });
     return count;
+  }
+
+  async getAllCodeElements(repoId: string): Promise<any[]> {
+    const elements: any[] = [];
+    for (const element of this.codeElements.values()) {
+      if (element.repoId === repoId) {
+        elements.push(element);
+      }
+    }
+    return elements;
+  }
+
+  async saveFileHash(repoId: string, filePath: string, fileHash: string): Promise<void> {
+    const key = `${repoId}:${filePath}`;
+    this.fileHashes.set(key, fileHash);
+    return Promise.resolve();
+  }
+
+  async getFileHash(repoId: string, filePath: string): Promise<string | null> {
+    const key = `${repoId}:${filePath}`;
+    return this.fileHashes.get(key) || null;
   }
 }
 

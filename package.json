@@ -78,7 +78,9 @@
               "image": "resources/arc_diagram.png",
               "altText": "ARC Welcome"
             },
-            "completionEvents": ["onCommand:arc.showWelcome"]
+            "completionEvents": [
+              "onCommand:arc.showWelcome"
+            ]
           },
           {
             "id": "indexRepo",
@@ -88,7 +90,9 @@
               "image": "resources/arc_diagram.png",
               "altText": "Repository Indexing"
             },
-            "completionEvents": ["onCommand:arc.indexRepository"]
+            "completionEvents": [
+              "onCommand:arc.indexRepository"
+            ]
           },
           {
             "id": "viewArchitecture",
@@ -98,7 +102,9 @@
               "image": "resources/arc_diagram.png",
               "altText": "Architecture Diagram"
             },
-            "completionEvents": ["onCommand:arc.showArchitecturePanel"]
+            "completionEvents": [
+              "onCommand:arc.showArchitecturePanel"
+            ]
           },
           {
             "id": "captureDecisions",
@@ -108,7 +114,9 @@
               "image": "resources/arc_diagram.png",
               "altText": "Decision Records"
             },
-            "completionEvents": ["onCommand:arc.createDecisionRecord"]
+            "completionEvents": [
+              "onCommand:arc.createDecisionRecord"
+            ]
           }
         ]
       }
@@ -117,11 +125,31 @@
       "type": "object",
       "title": "ARC extension settings",
       "properties": {
-        "arc.enableFileCache": { "type": "boolean", "default": true, "description": "Enable file-hash incremental parsing (dirty-file cache)" },
-        "arc.enableWAL": { "type": "boolean", "default": true, "description": "Enable SQLite WAL journal mode and batch inserts" },
-        "arc.useWorkerPool": { "type": "boolean", "default": false, "description": "Offload parsing to a worker_threads pool" },
-        "arc.enableMCP": { "type": "boolean", "default": false, "description": "Expose secure MCP endpoints" },
-        "arc.encryptDB": { "type": "boolean", "default": false, "description": "Encrypt the database with SQLCipher" }
+        "arc.enableFileCache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable file-hash incremental parsing (dirty-file cache)"
+        },
+        "arc.enableWAL": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable SQLite WAL journal mode and batch inserts"
+        },
+        "arc.useWorkerPool": {
+          "type": "boolean",
+          "default": false,
+          "description": "Offload parsing to a worker_threads pool"
+        },
+        "arc.enableMCP": {
+          "type": "boolean",
+          "default": false,
+          "description": "Expose secure MCP endpoints"
+        },
+        "arc.encryptDB": {
+          "type": "boolean",
+          "default": false,
+          "description": "Encrypt the database with SQLCipher"
+        }
       }
     }
   },
@@ -141,25 +169,24 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.1.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.x",
     "@types/vscode": "^1.96.0",
     "@types/yargs": "^17.0.13",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
     "@typescript-eslint/parser": "^8.28.0",
-    "eslint": "^9.23.0",
-    "esbuild": "^0.25.1",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^5.8.2",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@types/better-sqlite3": "^7.1.0",
-    "ts-node": "^10.9.1"
-  },
-  "optionalDependencies": {
-    "sqlite3": "^5.1.6"
+    "esbuild": "^0.25.1",
+    "eslint": "^9.23.0",
+    "mocha": "^11.1.0",
+    "npm-run-all": "^4.1.5",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.8.2"
   },
   "dependencies": {
-    "better-sqlite3": "^8.2.0",
+    "better-sqlite3": "^11.9.1",
     "web-tree-sitter": "^0.20.8",
     "yargs": "^17.7.2"
   }

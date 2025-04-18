@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+
 import BetterSQLite3 from 'better-sqlite3';
 
 import { 
@@ -46,11 +47,63 @@ export class SQLitePersistenceService implements IPersistenceService {
     return new Promise<void>((resolve, reject) => {
       try {
         // Instantiate DB
-        this.db = new BetterSQLite3(this.dbPath) as any;
-        this.db.pragma('journal_mode = WAL');
-        this.db.pragma('synchronous = NORMAL');
-        this.db.pragma('temp_store = MEMORY');
-        this.db.pragma('foreign_keys = ON');
+        console.log(`Initializing database at path: ${this.dbPath}`);
+        
+        // Ensure the directory exists again (just to be safe)
+        const dbDir = path.dirname(this.dbPath);
+        if (!fs.existsSync(dbDir)) {
+          console.log(`Creating database directory: ${dbDir}`);
+          fs.mkdirSync(dbDir, { recursive: true });
+        }
+        
+        // Try to instantiate the database with more detailed error handling
+        try {
+          this.db = new BetterSQLite3(this.dbPath, {
+            // Adding verbose option for better diagnostics
+            verbose: console.log
+          }) as any;
+        } catch (dbError) {
+          console.error('Error instantiating BetterSQLite3:', dbError);
+          if (typeof dbError === 'object' && dbError && 'stack' in dbError) {
+            console.error('Stack:', (dbError as Error).stack);
+          }
+          // Log to VS Code output channel if available
+          if ((global as any).arcOutputChannel) {
+            (global as any).arcOutputChannel.appendLine('ARC DB initialization error: ' + (dbError && dbError.stack ? dbError.stack : dbError));
+          }
+          // Show error popup in VS Code if available
+          if (typeof require !== 'undefined') {
+            try {
+              const vscode = require('vscode');
+              vscode.window.showErrorMessage(`Failed to initialize ARC database: ${dbError && dbError.message ? dbError.message : dbError}`);
+            } catch (_) {}
+          }
+          throw new Error(`Failed to create SQLite database: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+        }
+        
+        // Set pragmas with error handling
+        try {
+          this.db.pragma('journal_mode = WAL');
+          this.db.pragma('synchronous = NORMAL');
+          this.db.pragma('temp_store = MEMORY');
+          this.db.pragma('foreign_keys = ON');
+        } catch (pragmaError) {
+          console.error('Error setting SQLite pragmas:', pragmaError);
+          if (typeof pragmaError === 'object' && pragmaError && 'stack' in pragmaError) {
+            console.error('Stack:', (pragmaError as Error).stack);
+          }
+          if ((global as any).arcOutputChannel) {
+            (global as any).arcOutputChannel.appendLine('ARC DB pragma error: ' + (pragmaError && pragmaError.stack ? pragmaError.stack : pragmaError));
+          }
+          if (typeof require !== 'undefined') {
+            try {
+              const vscode = require('vscode');
+              vscode.window.showErrorMessage(`Failed to set ARC DB pragmas: ${pragmaError && pragmaError.message ? pragmaError.message : pragmaError}`);
+            } catch (_) {}
+          }
+          throw new Error(`Failed to set SQLite pragmas: ${pragmaError instanceof Error ? pragmaError.message : String(pragmaError)}`);
+        }
+        
         const schema = `
           -- Repositories table
           CREATE TABLE IF NOT EXISTS repositories (
@@ -139,12 +192,50 @@ export class SQLitePersistenceService implements IPersistenceService {
           CREATE INDEX IF NOT EXISTS idx_decision_records_repo_id ON decision_records (repo_id);
         `;
         
-        const batch = this.db.transaction(() => this.db.exec(schema));
-        batch();
-        console.log('Database initialized successfully');
-        resolve();
+        try {
+          // Execute schema creation in a transaction
+          const batch = this.db.transaction(() => this.db.exec(schema));
+          batch();
+          console.log('Database schema created successfully');
+          resolve();
+        } catch (schemaError) {
+          console.error('Error creating database schema:', schemaError);
+          if (typeof schemaError === 'object' && schemaError && 'stack' in schemaError) {
+            console.error('Stack:', (schemaError as Error).stack);
+          }
+          if ((global as any).arcOutputChannel) {
+            (global as any).arcOutputChannel.appendLine('ARC DB schema error: ' + (schemaError && schemaError.stack ? schemaError.stack : schemaError));
+          }
+          if (typeof require !== 'undefined') {
+            try {
+              const vscode = require('vscode');
+              vscode.window.showErrorMessage(`Failed to create ARC DB schema: ${schemaError && schemaError.message ? schemaError.message : schemaError}`);
+            } catch (_) {}
+          }
+          throw new Error(`Failed to create database schema: ${schemaError instanceof Error ? schemaError.message : String(schemaError)}`);
+        }
       } catch (error) {
-        console.error('Error initializing database:', error);
+        console.error('Error in database initialization process:', error);
+        if (typeof error === 'object' && error && 'stack' in error) {
+          console.error('Stack:', (error as Error).stack);
+        }
+        // Check if the error is related to file permissions
+        if (error.message && error.message.includes('permission')) {
+          console.error('This may be a file permission issue. Check if the extension has write access to:', this.dbPath);
+        }
+        // Check if the error is related to the SQLite binary
+        if (error.message && error.message.includes('bindings')) {
+          console.error('This may be an issue with the SQLite native bindings. Check if better-sqlite3 is properly installed.');
+        }
+        if ((global as any).arcOutputChannel) {
+          (global as any).arcOutputChannel.appendLine('ARC DB general error: ' + (error && error.stack ? error.stack : error));
+        }
+        if (typeof require !== 'undefined') {
+          try {
+            const vscode = require('vscode');
+            vscode.window.showErrorMessage(`Failed to initialize ARC database: ${error && error.message ? error.message : error}`);
+          } catch (_) {}
+        }
         reject(error);
       }
     });

@@ -4,7 +4,6 @@ import * as crypto from 'crypto';
 import { IGitHubIntegrationService } from './IGitHubIntegrationService';
 import { IPersistenceService } from '../persistence/IPersistenceService';
 import { Commit, Developer } from '../models/types';
-import { showInformationMessage, showErrorMessage } from '../utils/vscodeAdapter';
 
 /**
  * Implementation of IGitHubIntegrationService using Git CLI
@@ -75,9 +74,9 @@ export class GitHubIntegrationService implements IGitHubIntegrationService {
         await this.processChangedFiles(repoPath, repoId, hash);
       }
       
-      showInformationMessage(`Indexed ${commits.length} commits from repository`);
+      console.log(`Indexed ${commits.length} commits from repository`);
     } catch (error) {
-      showErrorMessage(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
