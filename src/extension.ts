@@ -53,11 +53,13 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Initialize services
   const persistenceService: IPersistenceService = new SQLitePersistenceService(context);
+  let databaseInitialized = false;
 
   // Initialize the database
-  persistenceService.initializeDatabase()
+  const initializationPromise = persistenceService.initializeDatabase()
     .then(() => {
       console.log('ARC database initialized successfully');
+      databaseInitialized = true;
     })
     .catch(error => {
       console.error('Failed to initialize ARC database:', error);
@@ -140,6 +142,15 @@ export function activate(context: vscode.ExtensionContext) {
   // Command: Index Repository
   const indexRepositoryCommand = vscode.commands.registerCommand('arc.indexRepository', async () => {
     try {
+      // Wait for database initialization to complete
+      if (!databaseInitialized) {
+        vscode.window.showInformationMessage('Waiting for database initialization...');
+        await initializationPromise;
+
+        if (!databaseInitialized) {
+          throw new Error('Database not initialized');
+        }
+      }
       // Get the workspace folder
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {

@@ -28,6 +28,8 @@ export class SQLitePersistenceService implements IPersistenceService {
   // Using `any` to allow legacy run/get/all calls; will refactor to Statement API later
   private db: any = null;
   private dbPath: string;
+  private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor(contextOrPath: any) {
     try {
@@ -65,7 +67,18 @@ export class SQLitePersistenceService implements IPersistenceService {
    * Initialize the database with the required schema
    */
   async initializeDatabase(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    // If already initialized, return immediately
+    if (this.isInitialized) {
+      return Promise.resolve();
+    }
+
+    // If initialization is in progress, return the existing promise
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
+
+    // Create a new initialization promise
+    this.initializationPromise = new Promise<void>((resolve, reject) => {
       try {
         // Instantiate DB
         console.log(`Initializing database at path: ${this.dbPath}`);
@@ -262,6 +275,7 @@ export class SQLitePersistenceService implements IPersistenceService {
           const batch = this.db.transaction(() => this.db.exec(schema));
           batch();
           console.log('Database schema created successfully');
+          this.isInitialized = true;
           resolve();
         } catch (schemaError) {
           console.error('Error creating database schema:', schemaError);
@@ -301,13 +315,35 @@ export class SQLitePersistenceService implements IPersistenceService {
             vscode.window.showErrorMessage(`Failed to initialize ARC database: ${error && error.message ? error.message : error}`);
           } catch (_) {}
         }
+        this.initializationPromise = null; // Clear the promise so we can try again
         reject(error);
       }
     });
+
+    return this.initializationPromise;
+  }
+
+  /**
+   * Check if the database is initialized
+   * @returns A promise that resolves when the database is initialized
+   */
+  private async ensureDatabaseInitialized(): Promise<void> {
+    if (this.isInitialized && this.db) {
+      return Promise.resolve();
+    }
+
+    if (!this.initializationPromise) {
+      return this.initializeDatabase();
+    }
+
+    return this.initializationPromise;
   }
 
   // Repository operations
   async saveRepository(repository: Repository): Promise<void> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<void>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -330,6 +366,9 @@ export class SQLitePersistenceService implements IPersistenceService {
   }
 
   async getRepository(repoId: string): Promise<Repository | null> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<Repository | null>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -361,6 +400,9 @@ export class SQLitePersistenceService implements IPersistenceService {
   }
 
   async getRepositoryIds(): Promise<string[]> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<string[]>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -384,6 +426,9 @@ export class SQLitePersistenceService implements IPersistenceService {
 
   // Developer operations
   async saveDeveloper(developer: Developer): Promise<void> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<void>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -406,6 +451,9 @@ export class SQLitePersistenceService implements IPersistenceService {
   }
 
   async getDeveloperByEmail(email: string): Promise<Developer | null> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<Developer | null>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -438,6 +486,9 @@ export class SQLitePersistenceService implements IPersistenceService {
 
   // Commit operations
   async saveCommit(commit: Commit): Promise<void> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<void>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -471,6 +522,9 @@ export class SQLitePersistenceService implements IPersistenceService {
   }
 
   async getCommit(commitHash: string): Promise<Commit | null> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<Commit | null>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -506,6 +560,9 @@ export class SQLitePersistenceService implements IPersistenceService {
 
   // CodeElement operations
   async saveCodeElement(codeElement: CodeElement): Promise<void> {
+    // Ensure database is initialized
+    await this.ensureDatabaseInitialized();
+
     return new Promise<void>((resolve, reject) => {
       if (!this.db) {
         reject(new Error('Database not initialized'));
@@ -1136,6 +1193,8 @@ export class SQLitePersistenceService implements IPersistenceService {
     return new Promise<void>((resolve, reject) => {
       if (!this.db) {
         // No connection to close
+        this.isInitialized = false;
+        this.initializationPromise = null;
         resolve();
         return;
       }
@@ -1144,6 +1203,8 @@ export class SQLitePersistenceService implements IPersistenceService {
         // Close the database connection
         this.db.close();
         this.db = null;
+        this.isInitialized = false;
+        this.initializationPromise = null;
         console.log('Database connection closed');
         resolve();
       } catch (error) {
@@ -1160,7 +1221,7 @@ export class SQLitePersistenceService implements IPersistenceService {
     console.log('Clearing SQLitePersistenceService caches...');
 
     // Clear any statement caches
-    if (this.db) {
+    if (this.db && this.isInitialized) {
       try {
         // Run PRAGMA to shrink the database
         this.db.pragma('shrink_memory');
@@ -1172,6 +1233,8 @@ export class SQLitePersistenceService implements IPersistenceService {
       } catch (error) {
         console.error('Error clearing database caches:', error);
       }
+    } else {
+      console.log('Database not initialized, skipping cache clearing');
     }
   }
 }

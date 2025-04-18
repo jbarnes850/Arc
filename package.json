@@ -2,6 +2,7 @@
   "name": "arc",
   "displayName": "Arc",
   "description": "Ambient architectural memory for your code — capture, preserve, and surface decisions directly in your IDE.",
+  "icon": "resources/arc-logo.png",
   "version": "0.0.1",
   "publisher": "Arc",
   "repository": {

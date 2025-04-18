@@ -1,6 +1,11 @@
-# ARC: The Memory Layer for Engineering Teams
+<div align="center">
+  <img src="resources/arc-logo.png" alt="ARC Logo" width="200"/>
+  <h1>ARC: The Memory Layer for Engineering Teams</h1>
+</div>
 
-> A local-first, ambient memory system that captures the *why* behind your code — and surfaces it directly inside your IDE.
+> **Ship fast—without losing the why.**
+> 
+> Arc surfaces the reason behind every line of code—locally, in milliseconds.
 
 ---
 
@@ -50,22 +55,26 @@ ARC transforms your repo into **a living architectural memory**, where structura
 | Feature                         | Description                                                                 |
 |---------------------------------|-----------------------------------------------------------------------------|
 | Local-first knowledge graph  | Powered by SQLite; no cloud or auth required                               |
-| Git commit integration       | Pulls and indexes commit history using Git CLI                             |
+| Git commit integration       | Pulls and indexes commit history using Git CLI with optimized batch processing |
 | Code parsing via `tree-sitter` | Indexes structural elements (Files, Classes, Functions) from ASTs         |
 | Temporal KG                  | Tracks how every code element evolves over time (via `CodeElementVersion`)|
 | Decision linking             | Developers can record and link decisions to specific code states           |
 | Context panel in VS Code     | View commit + decision history per file/class/function                     |
 | Architecture diagram         | Auto-generated static view of system structure after initial indexing      |
+| Progressive indexing         | Tiered approach that provides immediate value while indexing continues     |
+| Memory optimization          | Intelligent resource management to keep memory usage under 200MB           |
 
 ---
 
 ## Performance & Feature Flags
 
-- **Cold-index**: ≤ 7 s for 5 K LoC; ≤ 60 s for 100 K LoC  
-- **Incremental update** (≤ 200 changed files): < 5 s  
-- **`/memory.slice`** P95 ≤ 200 ms; payload ≤ 1 KB JSON  
-- **Context panel first paint**: ≤ 80 ms  
-- **Static Mermaid diagram** render: ≤ 300 ms
+- **Cold-index**: ≤ 7 s for 5 K LoC; ≤ 60 s for 100 K LoC  
+- **Incremental update** (≤ 200 changed files): < 5 s  
+- **Memory usage**: Optimized to stay below 200 MB
+- **Batch processing**: Configurable batch size for commit processing
+- **`/memory.slice`** P95 ≤ 200 ms; payload ≤ 1 KB JSON  
+- **Context panel first paint**: ≤ 80 ms  
+- **Static Mermaid diagram** render: ≤ 300 ms
 
 > **Feature Flags**  
 > - `arc.enableWAL`: enable WAL & batch inserts  
@@ -73,6 +82,7 @@ ARC transforms your repo into **a living architectural memory**, where structura
 > - `arc.enableFileCache`: file-hash incremental parse  
 > - `arc.enableMCP`: expose secure MCP endpoints  
 > - `arc.encryptDB`: toggle DB encryption or ACL checks
+> - `arc.telemetry`: enable/disable anonymous usage telemetry
 
 ---
 
@@ -104,7 +114,7 @@ Those are coming in future releases — but first, we're perfecting the core: **
 ```bash
 pnpm install
 pnpm run build
-code --install-extension ./dist/arc-1.vsix
+code --install-extension arc-0.0.1.vsix
 ```
 
 Then in VS Code:
