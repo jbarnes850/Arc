@@ -13,6 +13,7 @@ suite('GitHubIntegrationService Test Suite', () => {
     const mockPersistenceService: IPersistenceService = {
       saveRepository: async () => {},
       getRepository: async () => null,
+      getRepositoryIds: async () => [],
       saveDeveloper: async () => {},
       getDeveloperByEmail: async () => null,
       saveCommit: async () => {},

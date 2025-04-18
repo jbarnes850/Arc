@@ -14,6 +14,7 @@ export interface IPersistenceService {
   // Repository operations
   saveRepository(repository: Repository): Promise<void>;
   getRepository(repoId: string): Promise<Repository | null>;
+  getRepositoryIds(): Promise<string[]>;
 
   // Developer operations
   saveDeveloper(developer: Developer): Promise<void>;

@@ -35,6 +35,10 @@ class MockPersistenceService implements IPersistenceService {
     return this.repositories.get(repoId) || null;
   }
 
+  async getRepositoryIds(): Promise<string[]> {
+    return Array.from(this.repositories.keys());
+  }
+
   async saveDeveloper(developer: any): Promise<void> {
     this.developers.set(developer.devId, developer);
     return Promise.resolve();

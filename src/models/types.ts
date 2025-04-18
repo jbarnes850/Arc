@@ -22,6 +22,7 @@ export interface Commit {
   timestamp: number;
   authorDevId: string;
   committerDevId: string;
+  parentHash?: string;
 }
 
 export interface CodeElement {

@@ -29,9 +29,15 @@ export class SQLitePersistenceService implements IPersistenceService {
   private db: any = null;
   private dbPath: string;
 
-  constructor(context: any) {
-    // Store the database in the extension's global storage path
-    this.dbPath = path.join(context.globalStorageUri.fsPath, 'arc-knowledge-graph.db');
+  constructor(contextOrPath: any) {
+    // Check if we're given a direct path or a VS Code extension context
+    if (typeof contextOrPath === 'string') {
+      // Direct path to the database file
+      this.dbPath = contextOrPath;
+    } else {
+      // VS Code extension context
+      this.dbPath = path.join(contextOrPath.globalStorageUri.fsPath, 'arc-knowledge-graph.db');
+    }
 
     // Ensure the directory exists
     const dbDir = path.dirname(this.dbPath);
@@ -311,6 +317,28 @@ export class SQLitePersistenceService implements IPersistenceService {
           path: row.path,
           name: row.name
         });
+      });
+    });
+  }
+
+  async getRepositoryIds(): Promise<string[]> {
+    return new Promise<string[]>((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      const sql = `
+        SELECT repo_id FROM repositories
+      `;
+
+      this.db.all(sql, [], (err: SQLiteError, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        resolve(rows.map(row => row.repo_id));
       });
     });
   }

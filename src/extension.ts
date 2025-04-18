@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 
 import { SQLitePersistenceService } from './persistence/SQLitePersistenceService';
 import { IPersistenceService } from './persistence/IPersistenceService';
@@ -17,6 +18,12 @@ import { ArchitectureDiagramGenerator } from './ui/ArchitectureDiagramGenerator'
 import { IArchitectureDiagramGenerator } from './ui/IArchitectureDiagramGenerator';
 import { ContextPanel } from './ui/ContextPanel';
 import { ArchitecturePanel } from './ui/ArchitecturePanel';
+import { ContextToast } from './ui/ContextToast';
+import { PeekViewManager } from './ui/PeekViewProvider';
+import { DecisionCaptureProvider } from './ui/DecisionCaptureProvider';
+import { IndexProgressProvider } from './ui/IndexProgressProvider';
+import { ArchitectureStatusBarItem } from './ui/ArchitectureStatusBarItem';
+import { HoverDiffProvider } from './ui/HoverDiffProvider';
 import { Repository } from './models/types';
 
 // This method is called when your extension is activated
@@ -25,11 +32,11 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Check if this is the first run
   const isFirstRun = context.globalState.get('arc.firstRun', true);
-  
+
   if (isFirstRun) {
     // Mark as no longer first run
     context.globalState.update('arc.firstRun', false);
-    
+
     // Show the welcome walkthrough
     // Use a simple Promise to delay execution without relying on Node.js-specific functions
     Promise.resolve().then(() => {
@@ -39,7 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Initialize services
   const persistenceService: IPersistenceService = new SQLitePersistenceService(context);
-  
+
   // Initialize the database
   persistenceService.initializeDatabase()
     .then(() => {
@@ -49,15 +56,15 @@ export function activate(context: vscode.ExtensionContext) {
       console.error('Failed to initialize ARC database:', error);
       vscode.window.showErrorMessage('Failed to initialize ARC database. See console for details.');
     });
-  
+
   // Create services
   const codeParserService: ICodeParserService = new CodeParserService();
   const gitService: IGitHubIntegrationService = new GitHubIntegrationService(persistenceService);
-  
+
   // Read user settings for feature flags
   const config = vscode.workspace.getConfiguration('arc');
   const enableFileCache = config.get<boolean>('enableFileCache', true);
-  
+
   const knowledgeGraphService: IKnowledgeGraphService = new KnowledgeGraphService(
     persistenceService,
     codeParserService,
@@ -66,13 +73,54 @@ export function activate(context: vscode.ExtensionContext) {
   );
   const decisionRecordService: IDecisionRecordService = new DecisionRecordService(persistenceService);
   const diagramGenerator: IArchitectureDiagramGenerator = new ArchitectureDiagramGenerator(knowledgeGraphService);
-  
-  // Create UI panels
+
+  // Create UI panels and providers
   const contextPanel = ContextPanel.getInstance(context, knowledgeGraphService);
   const architecturePanel = ArchitecturePanel.getInstance(context, diagramGenerator);
-  
+  const peekViewManager = PeekViewManager.getInstance(context, knowledgeGraphService, decisionRecordService);
+  const contextToast = ContextToast.getInstance(context, knowledgeGraphService);
+  const decisionCaptureProvider = DecisionCaptureProvider.getInstance(context, decisionRecordService, knowledgeGraphService, peekViewManager);
+  const indexProgressProvider = IndexProgressProvider.getInstance(context);
+  const architectureStatusBarItem = ArchitectureStatusBarItem.getInstance(context);
+  const hoverDiffProvider = HoverDiffProvider.getInstance(context, knowledgeGraphService, decisionRecordService);
+
+  // Show the status bar items
+  indexProgressProvider.show();
+  architectureStatusBarItem.show();
+
   // Register commands
-  
+
+  // Command: Get Repositories
+  const getRepositoriesCommand = vscode.commands.registerCommand('arc.getRepositories', async () => {
+    try {
+      // Get all repositories from the database
+      const repositories: Repository[] = [];
+      const repoIds = await persistenceService.getRepositoryIds();
+
+      for (const repoId of repoIds) {
+        const repo = await persistenceService.getRepository(repoId);
+        if (repo) {
+          repositories.push(repo);
+        }
+      }
+
+      return repositories;
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to get repositories: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  });
+
+  // Command: Get Code Elements
+  const getCodeElementsCommand = vscode.commands.registerCommand('arc.getCodeElements', async (repoId: string) => {
+    try {
+      return await persistenceService.getAllCodeElements(repoId);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to get code elements: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  });
+
   // Command: Index Repository
   const indexRepositoryCommand = vscode.commands.registerCommand('arc.indexRepository', async () => {
     try {
@@ -82,11 +130,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('No workspace folder open');
         return;
       }
-      
+
       const workspaceFolder = workspaceFolders[0];
       const repoPath = workspaceFolder.uri.fsPath;
       const repoName = workspaceFolder.name;
-      
+
       // Request explicit authorization with clear information
       const authorization = await vscode.window.showInformationMessage(
         `ARC needs to index your repository "${repoName}" to build a temporal knowledge graph. This will:
@@ -99,151 +147,92 @@ This is a one-time process that takes a few moments.`,
         { modal: true },
         'Authorize Indexing'
       );
-      
+
       if (authorization !== 'Authorize Indexing') {
         return; // User declined
       }
-      
+
       // Generate a repository ID
       const repoId = crypto.createHash('sha256').update(repoPath).digest('hex').substring(0, 16);
-      
+
       // Save the repository
       const repository: Repository = {
         repoId,
         path: repoPath,
         name: repoName
       };
-      
+
       await persistenceService.saveRepository(repository);
-      
-      // Show progress while indexing
-      await vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: `Indexing repository: ${repoName}`,
-        cancellable: true
-      }, async (progress: vscode.Progress<{ message?: string; increment?: number }>, token: vscode.CancellationToken) => {
-        // Handle user cancellation
-        token.onCancellationRequested(() => {
-          vscode.window.showWarningMessage('Indexing cancelled by user');
-          throw new Error('Indexing cancelled');
-        });
-        
+
+      // Start the indexing progress
+      indexProgressProvider.startIndexing(repoId, repoPath);
+
+      try {
         // Initialize the parser for TypeScript
         await codeParserService.initializeParser('typescript');
-        
+
         // Index the repository
-        progress.report({ message: 'Extracting commit history...' });
+        indexProgressProvider.updateProgress(0);
         await gitService.indexCommitHistory(repoPath, repoId);
-        
+
+        // Count lines of code
+        const loc = await countLinesOfCode(repoPath);
+
+        // Complete the indexing
+        indexProgressProvider.completeIndexing(true, loc);
+
         // Show the architecture diagram
-        progress.report({ message: 'Generating architecture diagram...' });
         architecturePanel.show();
         await architecturePanel.updateDiagram(repoId, repoName);
-        
-        return 'Repository indexed successfully';
-      });
-      
+      } catch (error) {
+        // Handle error
+        indexProgressProvider.completeIndexing(false, 0);
+        throw error;
+      }
+
       // Get counts for the magic moment toast
       const elementCount = await persistenceService.getCodeElementCount(repoId);
       const commitCount = await persistenceService.getCommitCount(repoId);
       const decisionCount = await persistenceService.getDecisionCount(repoId);
-      
+
       // Show the magic moment toast with actual counts
       const magicMomentAction = await vscode.window.showInformationMessage(
         `Indexing complete. ${elementCount} elements tracked. ${commitCount} commits analyzed. ${decisionCount} decisions linked (yet). Let's fix that.`,
         'Create Decision'
       );
-      
+
       if (magicMomentAction === 'Create Decision') {
         vscode.commands.executeCommand('arc.createDecisionRecord');
         return;
       }
-      
+
       // Guide the user to the next step with a clear call-to-action
       const nextAction = await vscode.window.showInformationMessage(
         `Repository indexed successfully! ARC has generated an architecture diagram for your system.`,
-        'Explore Architecture', 
+        'Explore Architecture',
         'Create Decision Record'
       );
-      
+
       if (nextAction === 'Create Decision Record') {
         vscode.commands.executeCommand('arc.createDecisionRecord');
       }
       // Architecture panel is already open if they choose "Explore Architecture"
-      
+
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to index repository: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
-  
+
   // Command: Create Decision Record
   const createDecisionRecordCommand = vscode.commands.registerCommand('arc.createDecisionRecord', async () => {
     try {
-      // Get the workspace folder
-      const workspaceFolders = vscode.workspace.workspaceFolders;
-      if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage('No workspace folder open');
-        return;
-      }
-      
-      const workspaceFolder = workspaceFolders[0];
-      const repoPath = workspaceFolder.uri.fsPath;
-      
-      // Generate a repository ID
-      const repoId = crypto.createHash('sha256').update(repoPath).digest('hex').substring(0, 16);
-      
-      // Prompt for decision title
-      const title = await vscode.window.showInputBox({
-        prompt: 'Enter decision title',
-        placeHolder: 'e.g., Use SQLite for persistence'
-      });
-      
-      if (!title) {
-        return; // User cancelled
-      }
-      
-      // Create a new untitled document for the decision content
-      const document = await vscode.workspace.openTextDocument({
-        language: 'markdown',
-        content: `# ${title}\n\n## Context\n\n## Decision\n\n## Consequences\n`
-      });
-      
-      // Show the document to the user
-      await vscode.window.showTextDocument(document);
-      
-      // Wait for the user to edit and save the document
-      const saveDecision = async () => {
-        const content = document.getText();
-        
-        // Create the decision record
-        const decision = await decisionRecordService.createDecisionRecord(title, content, repoId);
-        
-        vscode.window.showInformationMessage(`Decision record "${title}" created successfully`);
-        
-        // Prompt to link to current code
-        const shouldLink = await vscode.window.showQuickPick(['Yes', 'No'], {
-          placeHolder: 'Link this decision to the current code element?'
-        });
-        
-        if (shouldLink === 'Yes') {
-          vscode.commands.executeCommand('arc.linkDecisionToCode', decision.decisionId);
-        }
-      };
-      
-      // Register a one-time save handler
-      const disposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc: vscode.TextDocument) => {
-        if (savedDoc === document) {
-          await saveDecision();
-          disposable.dispose();
-        }
-      });
-      
-      context.subscriptions.push(disposable);
+      // Use the new decision capture provider
+      await vscode.commands.executeCommand('arc.captureDecision');
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to create decision record: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
-  
+
   // Command: Link Decision to Code
   const linkDecisionToCodeCommand = vscode.commands.registerCommand('arc.linkDecisionToCode', async (decisionId?: string) => {
     try {
@@ -253,32 +242,32 @@ This is a one-time process that takes a few moments.`,
         vscode.window.showErrorMessage('No active editor');
         return;
       }
-      
+
       // Get the file path
       const filePath = editor.document.uri.fsPath;
-      
+
       // Get the workspace folder
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {
         vscode.window.showErrorMessage('No workspace folder open');
         return;
       }
-      
+
       const workspaceFolder = workspaceFolders[0];
       const repoPath = workspaceFolder.uri.fsPath;
-      
+
       // Generate a repository ID
       const repoId = crypto.createHash('sha256').update(repoPath).digest('hex').substring(0, 16);
-      
+
       // Get the relative path
       const relativePath = path.relative(repoPath, filePath);
-      
+
       // Generate a stable identifier for the file
       const stableIdentifier = relativePath;
-      
+
       // Generate an element ID
       const elementId = crypto.createHash('sha256').update(`${repoId}:file:${stableIdentifier}`).digest('hex').substring(0, 16);
-      
+
       // If no decision ID was provided, prompt the user to select one
       if (!decisionId) {
         // In a real implementation, we would query the database for all decisions
@@ -286,19 +275,19 @@ This is a one-time process that takes a few moments.`,
         vscode.window.showErrorMessage('Linking to existing decisions is not implemented in this version');
         return;
       }
-      
+
       // Get the latest version of the element
       const version = await knowledgeGraphService.getLatestElementVersion(elementId);
       if (!version) {
         vscode.window.showErrorMessage('No version found for this file. Please index the repository first.');
         return;
       }
-      
+
       // Link the decision to the code version
       await decisionRecordService.linkDecisionToCodeVersion(decisionId, version.versionId);
-      
+
       vscode.window.showInformationMessage('Decision linked to code successfully');
-      
+
       // Update the context panel
       contextPanel.updateContext({
         elementId,
@@ -310,7 +299,7 @@ This is a one-time process that takes a few moments.`,
       vscode.window.showErrorMessage(`Failed to link decision to code: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
-  
+
   // Command: Show Context Panel
   const showContextPanelCommand = vscode.commands.registerCommand('arc.showContextPanel', async () => {
     try {
@@ -320,32 +309,32 @@ This is a one-time process that takes a few moments.`,
         contextPanel.show();
         return;
       }
-      
+
       // Get the file path
       const filePath = editor.document.uri.fsPath;
-      
+
       // Get the workspace folder
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {
         contextPanel.show();
         return;
       }
-      
+
       const workspaceFolder = workspaceFolders[0];
       const repoPath = workspaceFolder.uri.fsPath;
-      
+
       // Generate a repository ID
       const repoId = crypto.createHash('sha256').update(repoPath).digest('hex').substring(0, 16);
-      
+
       // Get the relative path
       const relativePath = path.relative(repoPath, filePath);
-      
+
       // Generate a stable identifier for the file
       const stableIdentifier = relativePath;
-      
+
       // Generate an element ID
       const elementId = crypto.createHash('sha256').update(`${repoId}:file:${stableIdentifier}`).digest('hex').substring(0, 16);
-      
+
       // Update the context panel
       contextPanel.updateContext({
         elementId,
@@ -358,7 +347,7 @@ This is a one-time process that takes a few moments.`,
       contextPanel.show();
     }
   });
-  
+
   // Command: Show Welcome
   const showWelcomeCommand = vscode.commands.registerCommand('arc.showWelcome', () => {
     // This command is primarily used as a completion event for the walkthrough
@@ -378,6 +367,64 @@ This is a one-time process that takes a few moments.`,
     architecturePanel.show();
   });
 
+  // Command: Show Commit Diff
+  const showCommitDiffCommand = vscode.commands.registerCommand('arc.showCommitDiff', async (commitHash: string) => {
+    try {
+      // Get the workspace folder
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+      }
+
+      const workspaceFolder = workspaceFolders[0];
+      const repoPath = workspaceFolder.uri.fsPath;
+
+      // Get the commit details
+      const commit = await persistenceService.getCommit(commitHash);
+      if (!commit) {
+        vscode.window.showErrorMessage(`Commit ${commitHash} not found`);
+        return;
+      }
+
+      // Show the diff using Git
+      const shortHash = commitHash.substring(0, 7);
+      const parentHash = commit.parentHash || `${commitHash}^`;
+
+      // Use the Git extension API to show the diff
+      const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
+      if (gitExtension) {
+        const api = gitExtension.getAPI(1);
+        if (api) {
+          const repo = api.repositories.find(r => r.rootUri.fsPath === repoPath);
+          if (repo) {
+            // Show the diff
+            await vscode.commands.executeCommand('git.openDiff', {
+              ref1: parentHash,
+              ref2: commitHash,
+              repository: repo
+            });
+
+            // Log telemetry
+            const config = vscode.workspace.getConfiguration('arc');
+            const telemetryEnabled = config.get<boolean>('telemetry', true);
+
+            if (telemetryEnabled) {
+              console.log(`Telemetry: commit_diff_shown`, { commitHash });
+            }
+
+            return;
+          }
+        }
+      }
+
+      // Fallback if Git extension is not available
+      vscode.window.showInformationMessage(`Showing diff for commit ${shortHash}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to show commit diff: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
   // Add commands to subscriptions
   context.subscriptions.push(
     indexRepositoryCommand,
@@ -385,19 +432,65 @@ This is a one-time process that takes a few moments.`,
     linkDecisionToCodeCommand,
     showContextPanelCommand,
     showWelcomeCommand,
-    showArchitecturePanelCommand
+    showArchitecturePanelCommand,
+    getRepositoriesCommand,
+    getCodeElementsCommand,
+    showCommitDiffCommand
   );
-  
+
   // Register tree data providers for the views
   vscode.window.registerTreeDataProvider('arcContextView', {
     getTreeItem: () => new vscode.TreeItem('No context available'),
     getChildren: () => Promise.resolve([])
   });
-  
+
   vscode.window.registerTreeDataProvider('arcArchitectureView', {
     getTreeItem: () => new vscode.TreeItem('No architecture available'),
     getChildren: () => Promise.resolve([])
   });
+}
+
+/**
+ * Count the lines of code in a repository
+ */
+async function countLinesOfCode(repoPath: string): Promise<number> {
+  try {
+    // Use a simple algorithm to count lines of code
+    let totalLines = 0;
+
+    // Function to recursively count lines in a directory
+    const countLinesInDir = async (dirPath: string) => {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+
+        // Skip node_modules and .git directories
+        if (entry.isDirectory()) {
+          if (entry.name !== 'node_modules' && entry.name !== '.git') {
+            await countLinesInDir(fullPath);
+          }
+        } else {
+          // Only count source code files
+          const ext = path.extname(entry.name).toLowerCase();
+          if (['.ts', '.js', '.tsx', '.jsx', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rb', '.php'].includes(ext)) {
+            // Read the file and count lines
+            const content = fs.readFileSync(fullPath, 'utf8');
+            const lines = content.split('\n').length;
+            totalLines += lines;
+          }
+        }
+      }
+    };
+
+    // Start counting
+    await countLinesInDir(repoPath);
+
+    return totalLines;
+  } catch (error) {
+    console.error('Error counting lines of code:', error);
+    return 0;
+  }
 }
 
 // This method is called when your extension is deactivated

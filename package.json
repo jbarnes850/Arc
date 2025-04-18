@@ -27,8 +27,21 @@
         "title": "ARC: Create Decision Record"
       },
       {
+        "command": "arc.captureDecision",
+        "title": "ARC: Capture Decision",
+        "shortTitle": "Capture Decision"
+      },
+      {
         "command": "arc.linkDecisionToCode",
         "title": "ARC: Link Decision to Current Code"
+      },
+      {
+        "command": "arc.showPeekView",
+        "title": "ARC: Show Context Peek View"
+      },
+      {
+        "command": "arc.showCommitDiff",
+        "title": "ARC: Show Commit Diff"
       },
       {
         "command": "arc.showWelcome",
@@ -121,6 +134,16 @@
         ]
       }
     ],
+    "keybindings": [
+      {
+        "command": "arc.captureDecision",
+        "key": "alt+cmd+d",
+        "mac": "alt+cmd+d",
+        "win": "alt+ctrl+d",
+        "linux": "alt+ctrl+d",
+        "when": "editorTextFocus"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "ARC extension settings",
@@ -149,6 +172,11 @@
           "type": "boolean",
           "default": false,
           "description": "Encrypt the database with SQLCipher"
+        },
+        "arc.telemetry": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable telemetry to help improve ARC"
         }
       }
     }

@@ -39,6 +39,10 @@ class MockPersistenceService implements IPersistenceService {
     return Promise.resolve(this.repositories.get(repoId) || null);
   }
 
+  async getRepositoryIds(): Promise<string[]> {
+    return Promise.resolve(Array.from(this.repositories.keys()));
+  }
+
   // Developer operations
   async saveDeveloper(developer: Developer): Promise<void> {
     this.developers.set(developer.devId, developer);
@@ -438,6 +442,14 @@ async function testDatabaseSchema() {
     console.log('Commit parents:', parents);
     if (parents.length !== 1 || parents[0] !== 'commit1') {
       throw new Error('Failed to get commit parents');
+    }
+
+    // Test query 5: Get repository IDs
+    console.log('Test query 5: Get repository IDs');
+    const repoIds = await persistenceService.getRepositoryIds();
+    console.log('Repository IDs:', repoIds);
+    if (repoIds.length !== 1 || repoIds[0] !== 'repo1') {
+      throw new Error('Failed to get repository IDs');
     }
 
     console.log('Database schema test completed successfully!');

@@ -1,6 +1,6 @@
 /**
  * ARC V1 Knowledge Graph Service Test
- * 
+ *
  * This test validates the KnowledgeGraphService implementation, which is the core
  * service for the Temporal Knowledge Graph used in ARC V1.
  */
@@ -37,6 +37,10 @@ class MockPersistenceService implements IPersistenceService {
 
   async getRepository(repoId: string): Promise<Repository | null> {
     return Promise.resolve(this.repositories.get(repoId) || null);
+  }
+
+  async getRepositoryIds(): Promise<string[]> {
+    return Promise.resolve(Array.from(this.repositories.keys()));
   }
 
   // Developer operations
